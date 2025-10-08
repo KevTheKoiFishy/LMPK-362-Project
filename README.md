@@ -1,9 +1,9 @@
 # LPMK ECE 362 Final Project
-#### GPS Timekeeping and Alarm with Music on RP2350  
+#### GPS Timekeeping and Alarm with Music on RP2350
 
 ### Parts List
 - RP2350 Proton Board and Debugger
-- ~~DS Series RTC (I^2^C)~~ (Rejected)
+- <span style="color: #777">~~DS Series RTC (I<sup>2</sup>C)~~ (Rejected)</span>
 - NEO-6M GPS Module (UART) for Satellite Timekeeping
 - LCD TFT Display (SPI) with SD Card Reader (SPI) for Image Storage/Display + Audio Storage
 - External DAC (I2C or Custom Build with Shift-Reg) for Audio Playback
@@ -11,7 +11,7 @@
 
 ### Functions
 - Current Time
-- Map and Time Zone
+- GPS Map
 - Alarm Settings
 - Stopwatch
 - Timer

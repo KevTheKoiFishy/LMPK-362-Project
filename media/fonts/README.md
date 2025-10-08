@@ -1,0 +1,14 @@
+## To Add a New Font
+- Find the TTF source of the font as a link
+  - You can use <a href="https://fonts.google.com/">Google Fonts</a>
+  - Select a font, select Get Embed Code, and copy the link
+  - Should look like `https://fonts.googleapis.com/css2?family=BBH+Sans+Bogle&display=swap`
+- Go to https://stmn.itch.io/font2bitmap and paste the link in
+- Use settings:
+  - Per Row: `19`
+  - Grid Width: `40`
+  - Grid Height: `50`
+  - Font Size: `42`
+  - Characters: ```!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~```
+  - Tick `centered` only
+- Save bitmap
