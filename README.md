@@ -42,4 +42,4 @@
         - Graphics and UX Design
 6. Iterate and Debug
 7. PCB Build (if time available)
-8. Report / Presentation
+8. Report / Presentations
