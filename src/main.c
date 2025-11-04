@@ -4,32 +4,11 @@
 #include "pico/stdlib.h"
 #include "hardware/pwm.h"
 #include "const.h"
-#include "queue.h"
-#include "support.h"
+#include "keypad_queue.h"
 
-//////////////////////////////////////////////////////////////////////////////
-
-const char* username = "yu1286";
-
-//////////////////////////////////////////////////////////////////////////////
-
-#define BASE_CLK            150000000u
-#define PWM_CLK_PSC         150u
-#define AUDIO_SAMPLE_PERIOD (BASE_CLK / PWM_CLK_PSC / RATE)
-
-static uint8_t duty_cycle = 0;
-static uint8_t dir = 0;
-static uint8_t color = 0;
-
-void autotest();
-void display_init_pins();
-void display_init_timer();
-void display_char_print(const char message[]);
-void keypad_init_pins();
-void keypad_init_timer();
-void init_wavetable(void);
-void set_freq(int chan, float f);
-extern KeyEvents kev;
+void    keypad_init_pins();
+void    keypad_init_timer();
+extern  KeyEvents kev;
 
 //////////////////////////////////////////////////////////////////////////////
 
