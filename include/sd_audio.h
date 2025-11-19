@@ -3,7 +3,7 @@
 #include "pico/stdlib.h"
 
 #include <hardware/spi.h>
-#include <tf_card.h>
+// #include <tf_card.h>
 
 #include "const.h"
 #include "sd.h"
@@ -20,3 +20,13 @@ const    uint16_t  LOAD_WHEN       = AUDIO_BUFFER_LEN >> 2;
 uint16_t get_buff_avail();
 
 FILE * audio_file = NULL;
+//audio_dma         = 
+
+
+uint16_t get_buff_avail();
+uint8_t open_sd_audio_file(const char* filename);
+void close_sd_audio_file();
+uint8_t start_sd_audio_read();
+void stop_sd_audio_read();
+uint8_t init_audio_dma();
+void start_audio_playback();

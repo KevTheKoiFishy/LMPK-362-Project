@@ -1,7 +1,6 @@
-#pragma once
-#include <stdint.h>
-
-uint32_t    init_sd_spi();
-void        deinit_sd_spi();
-uint8_t     mount_sd_card();
-void        unmount_sd_card();
+uint32_t init_spi_sdcard_with_baud(uint32_t baud);
+void init_spi_sdcard();
+void disable_sdcard();
+void enable_sdcard();
+void sdcard_io_high_speed();
+void init_sdcard_io();

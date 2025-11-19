@@ -3,7 +3,7 @@
 #include "pico/stdlib.h"
 
 #include <hardware/spi.h>
-#include <tf_card.h>
+// #include <tf_card.h>
 
 #include "const.h"
 #include "sd.h"
@@ -42,15 +42,19 @@ void close_sd_audio_file() {
 }
 
 uint8_t start_sd_audio_read() {
+    // Run the DMA
+
     // Start reading audio data from SD card into buffer via DMA
     // Triggered when buffer falls below LOAD_WHEN threshold.
-
     
 }
 
 void stop_sd_audio_read() {
+    // Stop the DMA
+    
     // Stop reading audio data from SD card
     // Triggered when buffer is full or EOF reached.
+
 }
 
 uint8_t init_audio_dma () {

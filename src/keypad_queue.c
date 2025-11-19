@@ -1,4 +1,4 @@
-#include "queue.h"
+#include "keypad_queue.h"
 
 KeyEvents kev = { .q = {0}, .head = 0, .tail = 0 };
 
@@ -19,4 +19,3 @@ void key_push(uint16_t value) {
     kev.q[kev.head] = value;
     kev.head = (kev.head + 1) % 32;
 }
-
