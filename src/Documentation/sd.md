@@ -19,4 +19,4 @@ Using SPI, connections are as follows:
 
 ## Software Interface
 - SD Card's Partition 0 (FAT32) is mounted as a drive.
-- You can then access the SD Card Data using standard file.h commands in C.
+- You can then access the SD Card Data using fatFS files in C.

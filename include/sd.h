@@ -1,3 +1,6 @@
+#define SD_SPI_BAUD         16000000  // 1 MHz
+#define SD_SPI_BAUD_SLOW    100000
+
 uint32_t init_spi_sdcard_with_baud(uint32_t baud);
 void init_spi_sdcard();
 void disable_sdcard();

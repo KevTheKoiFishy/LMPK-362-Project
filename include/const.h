@@ -1,4 +1,12 @@
-// Constants and macros to make our lives easier
+// Constants and macros to make our lives easier!
+
+// In order to prevent pin and hardware peripheral conflicts
+// betwee different parts of the project, state your pin choices
+// and spi/pwm/adc channels here.
+
+// For brevity, only put stuff that you're "claiming" for your functions.
+// Put all other define statements in your specific header files!
+
 #include <hardware/spi.h>
 
 // MACROS
@@ -22,8 +30,6 @@
 #define DISP_7SEG_MASK      (0x7FF << 10u)
 
 // SD CARD
-#define SD_SPI_BAUD         16000000  // 1 MHz
-#define SD_SPI_BAUD_SLOW    100000
 #define SD_SPI_PORT         spi0
 #define SD_PIN_MISO         32
 #define SD_PIN_CS           33
@@ -32,5 +38,3 @@
 
 // PWM AUDIO PLAYBACK
 #define BASE_CLK            150000000u
-#define PWM_CLK_PSC         150u
-#define AUDIO_SAMPLE_PERIOD (BASE_CLK / PWM_CLK_PSC / RATE)

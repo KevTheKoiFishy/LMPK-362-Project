@@ -110,6 +110,7 @@ struct commands_t {
 struct commands_t cmds[] = {
         { "append", append },
         { "cat", cat },
+        { "cat-hex", cat_hex },
         { "cd", cd },
         { "date", date },
         { "input", input },
@@ -118,7 +119,8 @@ struct commands_t cmds[] = {
         { "mount", mount },
         { "pwd", pwd },
         { "rm", rm },
-        { "restart", restart }
+        { "restart", restart },
+        { "exit", exit_cli }
 };
 
 // This function inserts a string into the input buffer and echoes it to the UART
@@ -174,7 +176,7 @@ void sd_command_shell() {
     
     printf("SD Card Command Shell");
     printf("\r\nType 'mount' to mount the SD card.\n");
-    while (1) {
+    while (sd_cli_running()) {
         printf("\r\n> ");
         fgets(input, sizeof(input), stdin);
         fflush(stdin);

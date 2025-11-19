@@ -1,5 +1,7 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "pico/stdlib.h"
 
 #include "sd_ff.h"
@@ -9,6 +11,9 @@
 
 #include "hardware/watchdog.h"
 #include "watchdog.c"
+
+// Just because i fw it
+int _read(__unused int handle, char *buffer, int length);
 
 FATFS fs_storage; // Global file system object
 const char *month_name[] = {
@@ -318,7 +323,7 @@ void mkdir(int argc, char *argv[])
     }
 }
 
-void mount(int argc, char *argv[])
+void mount(__unused int argc, __unused char *argv[])
 {
     FATFS *fs = &fs_storage;
     if (fs->id != 0) {
@@ -330,7 +335,7 @@ void mount(int argc, char *argv[])
         print_error(res, "Error occurred while mounting");
 }
 
-void pwd(int argc, char *argv[])
+void pwd(__unused int argc, __unused char *argv[])
 {
     char line[100];
     FRESULT res = f_getcwd(line, sizeof line);
@@ -372,6 +377,50 @@ void cat(int argc, char *argv[])
     }
 }
 
+void cat_hex(int argc, char *argv[]) {
+    if (argc < 2) { return; }
+
+    errno = 0; char * endptr;
+    uint num_lines_log = strtol(argv[1], &endptr, 10);
+    if (errno) { printf("cat_hex: Could not convert num_lines_log argument to int."); }
+
+    for(int i=2; i<argc; i++) {
+        FIL fil;        /* File object */
+        FRESULT fr;     /* FatFs return code */
+        char line[16];  /* Line buffer */
+        UINT rb;
+        uint read_bytes = 0;
+        uint lines_read = 0;
+
+        /* Open a text file */
+        if ((fr = f_open(&fil, argv[i], FA_READ))) {
+            print_error(fr, argv[i]);
+            return;
+        }
+
+        /* Read 16 bytes at a time and display it */
+        while(!(fr = f_read(&fil, line, 16, &rb))){
+            printf(   "%8d  ", lines_read);
+            printf("0x%08x  ", read_bytes += rb);
+
+            for (uint8_t ib = 0; ib < 16; ++ib){
+                printf("%02x ", line[ib]);
+            }
+            printf("  ");
+            for (uint8_t ib = 0; ib < 16; ++ib){
+                char this_ch = line[ib];
+                if (32 <= this_ch && this_ch <= 126) {printf("%c", this_ch);} else if (this_ch == 0) {printf(" ");} else {printf(".");}
+                if ((ib & 0x3) == 0b11) { printf(" "); }
+            }
+            printf("\n");
+
+            if (++lines_read > num_lines_log) { break; }
+        }
+        /* Close the file */
+        f_close(&fil);
+    }
+}
+
 void cd(int argc, char *argv[])
 {
     if (argc > 2) {
@@ -390,9 +439,18 @@ void cd(int argc, char *argv[])
         print_error(res, argv[1]);
 }
 
-void restart(int argc, char *argv[])
+void restart(__unused int argc, __unused char *argv[])
 {
     printf("Restarting microcontroller...\n\n\n");
     sleep_ms(100); // wait for message to be sent
     watchdog_reboot(0, 0, 0);
+}
+
+bool sd_uart_block = true;
+bool sd_cli_running(void) {
+    return sd_uart_block;
+}
+void exit_cli(__unused int argc, __unused char *argv[]){
+    printf("End SD-UART CLI.\n\n");
+    sd_uart_block = false;
 }
