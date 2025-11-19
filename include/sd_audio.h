@@ -14,11 +14,14 @@
 
 // Audio File Helpers
 typedef enum uint8_t {
-    SUCCESS              = 0,
-    ERR_ON_FILE_OPEN     = 1,
-    ERR_BAD_FILE_HEADER  = 2,
-    ERR_UNSUPPORTED_TYPE = 3,
-    ERR_BAD_WAV_HEADER   = 4,
+    SUCCESS              = 00,
+    ERR_ON_FILE_OPEN     = 01,
+    ERR_BAD_FILE_HEADER  = 02,
+    ERR_UNSUPPORTED_TYPE = 03,
+    ERR_BAD_WAV_HEADER   = 04,
+    ERR_NO_FILE_OPEN     = 011,
+    ERR_BUFF_FULL        = 012,
+    AUDIO_READ_EOF       = 020,
 } audio_file_result;
 
 typedef struct {
@@ -46,19 +49,19 @@ typedef struct {
 #define             DEFAULT_AUDIO_PATH  "AUDIO/SHAUN~17.WAV"
 
 // PWM Playback
-#define             PWM_CLK_PSC         150u
-#define             AUDIO_SAMPLE_PERIOD (sample_rate) BASE_CLK / PWM_CLK_PSC / sample_rate
+#define             PWM_CLK_PSC(sample_rate, bit_depth) BASE_CLK / sample_rate / bit_depth
 
 // Buffer
-#define             AUDIO_BUFFER_LEN 4096
+#define             AUDIO_BUFFER_LEN    512 // Make this a power of 2
 
 // Function Declarations
 void                close_sd_audio_file();
 audio_file_result   open_sd_audio_file(const char* filename);
 audio_file_result   wav_parse_headers();
 
+uint32_t            get_data_offset();
 uint16_t            get_buff_avail();
-audio_file_result   start_sd_audio_read();
+audio_file_result   fill_audio_buffer();
 void                stop_sd_audio_read();
 
 uint8_t             configure_audio_dma();

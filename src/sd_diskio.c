@@ -1,9 +1,12 @@
 
+#include <stdio.h>
+
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
+
+#include "sd.h"
 #include "sd_ff.h"     /* Obtains integer types */
 #include "sd_diskio.h" /* Declarations of disk functions */
-#include <stdio.h>
 
 spi_inst_t *sd = spi0; // the SPI interface to use for the SD card
 
@@ -164,8 +167,10 @@ restart:
     sdcard_init_clock();
     
     // Helps with high speed initialization
+#ifdef SD_SPI_USE_HIGH_SPEED
     sdcard_io_high_speed();
     for (uint8_t broski = 0; broski < 16; ++broski) { sdcard_init_clock(); }
+#endif
 
     spi_clear_rxfifo(sd);
     enable_sdcard();

@@ -29,6 +29,28 @@
 // 7-SEG DISPLAY
 #define DISP_7SEG_MASK      (0x7FF << 10u)
 
+/* leah:
+    volume:
+        hysteresis on volume potentiometer - adc - 
+        alarm vol ramp  - function
+    dyanmic brightness adjustment - potentially pwm
+*/
+
+// GPS MODULE - uart
+#define GPS_UART_TX         40
+#define GPS_UART_RX         41
+
+// VOLUME CONTROL
+#define VOL_ADC_PIN         44
+
+// DISPLAY (Maddie) - spi
+#define SPI_DISP_PORT       spi1
+#define SPI_DISP_CSn        29
+#define SPI_DISP_SCK        30
+#define SPI_DISP_TX         31
+
+#define DISP_BACKLIT_PWM    38
+
 // SD CARD
 #define SD_SPI_PORT         spi0
 #define SD_PIN_MISO         32
@@ -38,3 +60,7 @@
 
 // PWM AUDIO PLAYBACK
 #define BASE_CLK            150000000u
+#define AUDIO_PWM_INT_NUM   PWM_IRQ_WRAP_1
+#define AUDIO_PWM_SLICE     10
+#define AUDIO_PWM_PIN_L     36
+#define AUDIO_PWM_PIN_H     37

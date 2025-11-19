@@ -33,6 +33,20 @@ int main() {
     mount(0, NULL);
     open_sd_audio_file(DEFAULT_AUDIO_PATH);
 
+    audio_file_result buff_load_result = 0;
+    uint32_t pos_0 = get_data_offset();
+    uint32_t tick  = time_us_32();
+
+    uint16_t i = 1000;
+    while(!buff_load_result && --i){
+        buff_load_result = fill_audio_buffer();
+    }
+
+    uint32_t tock     = time_us_32();
+    uint32_t pos_f    = get_data_offset();
+    float    byterate = 1000000.0 * (pos_f - pos_0) / (tock - tick);
+    printf("Average Read Byte Rate: %lu bytes over %lu us = %.2f bytes/sec", pos_f - pos_0, tock - tick, byterate);
+
     // LONG, BLOCKING PROCESSES IN LOOP
     /**
      * Display Rendering and Refersh
@@ -40,4 +54,5 @@ int main() {
 
     while (1){
     }
+    
 }
