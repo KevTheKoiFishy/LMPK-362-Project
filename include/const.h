@@ -32,8 +32,8 @@
 #define DISP_7SEG_MASK      (0x7FF << 10u)
 
 // GPS MODULE - uart1
-#define GPS_UART_TX         40
-#define GPS_UART_RX         41
+#define GPS_UART_TX         24
+#define GPS_UART_RX         25
 
 // VOLUME CONTROL - adc4
 #define VOL_ADC_PIN         44
