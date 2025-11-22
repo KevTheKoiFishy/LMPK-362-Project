@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "pico/stdlib.h"
 #include "pico/time.h"
+#include "pico/stdlib.h"
+#include "pico/multicore.h"
 
 #include <hardware/spi.h>
 #include <hardware/pwm.h>
@@ -32,14 +33,15 @@ volatile uint16_t   i_audio_buf_w   = 0;
 volatile uint16_t   i_audio_buf_r   = 0;
 
 // Threshold to trigger start loading and stop loading more audio data
-const    uint16_t   LOAD_WHEN       = AUDIO_BUFFER_LEN >> 2;
+const    uint16_t   LOAD_THRES      = AUDIO_BUFFER_LEN >> 2;
 
 // PWM Settings
             float   audio_pwm_psc   = -1.0;     // Fractional prescaler
          uint16_t   audio_pwm_top   = -1;       // Actual top value
             float   audio_pwm_frq   = -1.0;     // Actual frequency
-            float   audio_pwm_scale =  0.5;     // Actual top / bit depth top
-
+            float   audio_pwm_scale = -1.0;     // Actual top / bit depth top
+            float   audio_base_vol  =  0.3;     // Actual top / bit depth top
+volatile uint32_t * cc_reg          = &(pwm_hw -> slice[AUDIO_PWM_SLICE].cc);
 
 // HELPER FUNCTIONS //
 
@@ -105,15 +107,24 @@ audio_file_result open_sd_audio_file(const char* filename) {
         return ERR_ON_FILE_OPEN;
     }
 
-#ifdef PRINT_SUCCESS
-    printf("open_sd_audio_file: Opened File %s\n", filename);
-#endif
+    printf("\n  (SUCCESS) open_sd_audio_file: Opened File `%s`\n", filename);
 
     // Parse Headers
     audio_file_result wfr = wav_parse_headers();
 
     if (wfr == SUCCESS) {
         audio_file_open = true;
+        printf("\n  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓");
+        printf("\n  ┃ fmt type          ┃ %8s     ┃",   wav_format.fmt_type);
+        printf("\n  ┃ num channels      ┃ %8s     ┃",   wav_format.num_channels == 2 ? "  STEREO" : "    MONO");
+        printf("\n  ┃ sample rate       ┃ %8.3f kHz ┃", wav_format.sample_rate * 1e-3f);
+        printf("\n  ┃ bytes/sec         ┃ %8d     ┃",   wav_format.byte_rate);
+        printf("\n  ┃ bytes/sample      ┃ %8d     ┃",   wav_format.bytes_per_ts);
+        printf("\n  ┃ bits_per_samp     ┃ %8d     ┃",   wav_format.bits_per_samp);
+        printf("\n  ┃ data_offset_base  ┃ %8d     ┃",   wav_format.data_offset_base);
+        printf("\n  ┃ file_size         ┃ %8.3f MiB ┃", file_header.file_size * 1e-6f);
+        printf("\n  ┃ data_size         ┃ %8d B   ┃",   wav_format.data_size);
+        printf("\n  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛");
     } else {
         f_close(&audio_file);
     }
@@ -244,9 +255,19 @@ void audio_file_lseek(UINT b) {
 
 //   SD -> BUFFER   //
 
-uint16_t          get_buff_avail() {
-    // Get available space in audio buffer
-    if (i_audio_buf_w >= i_audio_buf_r) {
+uint16_t          get_buff_readable() {
+    // Get readable space in audio buffer
+    // If write ptr = read ptr, then assume full
+    if (i_audio_buf_w <= i_audio_buf_r) {
+        return AUDIO_BUFFER_LEN - (i_audio_buf_r - i_audio_buf_w);
+    } else {
+        return i_audio_buf_w - i_audio_buf_r;
+    }
+}
+uint16_t          get_buff_writeable() {
+    // Get writeable space in audio buffer
+    // If write ptr = read ptr, then assume full
+    if (i_audio_buf_w > i_audio_buf_r) {
         return AUDIO_BUFFER_LEN - (i_audio_buf_w - i_audio_buf_r);
     } else {
         return i_audio_buf_r - i_audio_buf_w;
@@ -254,92 +275,130 @@ uint16_t          get_buff_avail() {
 }
 
 audio_file_result fill_audio_buffer() {
+#ifdef FILL_BUFFER_ERRCHECK
     if (!audio_file_open)  { return ERR_NO_FILE_OPEN; }
+#endif
 
-    // reopen_sd_audio_file();
-    // f_lseek(&audio_file, 0);
+    uint32_t buff_avail = get_buff_writeable();
 
-    uint32_t buff_avail = get_buff_avail();
+#ifdef FILL_BUFFER_ERRCHECK
     if (!buff_avail) { return ERR_BUFF_FULL; }
+#endif
     
     FRESULT fr;
-    UINT    br;
-    UINT    br2;
-
-    uint32_t i0_audio_buf_w = i_audio_buf_w;
-    i_audio_buf_w = (i_audio_buf_w + buff_avail) & (AUDIO_BUFFER_LEN - 1); // buff_avail mod 4096
-
-    uint32_t copy_size = buff_avail << 1;
-    if (i_audio_buf_w >= i_audio_buf_r) {
-        if ((fr = f_read(&audio_file, (char *) (audio_buffer + i0_audio_buf_w), copy_size, &br)))
-            { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
+    UINT    br, br2;
+    
+    if (i_audio_buf_w <= i_audio_buf_r) {
+        uint32_t copy_size = buff_avail << 1;
+        fr = f_read(&audio_file, (char *) (audio_buffer + i_audio_buf_w), copy_size, &br);
+#ifdef FILL_BUFFER_ERRCHECK
+        if (fr) { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
         if (br < copy_size) { goto eof_reached; }
+#endif
     } else {
-        uint32_t copy_size_hi = (AUDIO_BUFFER_LEN - i0_audio_buf_w) << 1;
-        uint32_t copy_size_lo = (i_audio_buf_w) << 1;
-
-        if ((fr = f_read(&audio_file, (char *) (audio_buffer + i0_audio_buf_w), copy_size_hi, &br)))
-            { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
+        uint32_t copy_size_hi = (AUDIO_BUFFER_LEN - i_audio_buf_w) << 1;
+        uint32_t copy_size_lo = (i_audio_buf_r) << 1;
+        
+        fr = f_read(&audio_file, (char *) (audio_buffer + i_audio_buf_w), copy_size_hi, &br);
+#ifdef FILL_BUFFER_ERRCHECK
+        if (fr) { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
         if (br < copy_size_hi) { goto eof_reached; }
+#endif
 
-        if ((fr = f_read(&audio_file, (char *) audio_buffer, copy_size_lo, &br2)))
-            { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
+        fr = f_read(&audio_file, (char *) audio_buffer, copy_size_lo, &br2);
+#ifdef FILL_BUFFER_ERRCHECK
+        if (fr) { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
         if ((br += br2) < copy_size) { goto eof_reached; }
+#endif
     }
+
+    i_audio_buf_w = i_audio_buf_r;  // (i_audio_buf_w + buff_avail) & (AUDIO_BUFFER_LEN - 1); // buff_avail mod 4096
 
     data_offset   = f_tell(&audio_file);
     return SUCCESS;
 
     // if no shi left to copy
+#ifdef FILL_BUFFER_ERRCHECK
     eof_reached:
-    i_audio_buf_w = (i0_audio_buf_w + (br >> 1)) & (AUDIO_BUFFER_LEN - 1); // rollback change
+    i_audio_buf_w = (i_audio_buf_w + (br >> 1)) & (AUDIO_BUFFER_LEN - 1); // add however many was copied
     data_offset   = f_tell(&audio_file);
     return AUDIO_READ_EOF;
+#endif
 }
 
 audio_file_result add1_audio_buffer() {
-    if (!get_buff_avail()) { return ERR_BUFF_FULL; }
+    if (i_audio_buf_r == i_audio_buf_w) { return ERR_BUFF_FULL; }
 
-    FRESULT fr;
-    UINT    br;
-
-    if ((fr = f_read(&audio_file, (char *) (audio_buffer + i_audio_buf_w), 2, &br)))
-        { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
-    
-    if (br < 2) { goto eof_reached; }
+    UINT br; f_read(&audio_file, (char *) (audio_buffer + i_audio_buf_w), 2, &br); if (br < 2) { goto eof_reached; }
 
     i_audio_buf_w = (i_audio_buf_w + 1) & (AUDIO_BUFFER_LEN - 1);
     data_offset   += br;
     return SUCCESS;
 
-    // if no shi left to copy
     eof_reached:
     data_offset = f_tell(&audio_file);
     return AUDIO_READ_EOF;
-
 }
 
 //  BUFFER -> PWM   //
 
-void              step_audio_isr() {
+/* void              step_audio_isr() {
     // isr to read next sample from audio_buffer
     pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);                          // ch 10
     
     int16_t samp    = (audio_buffer[i_audio_buf_r] << 1);               // Retrieve FIFO
     int16_t scaled  = (int16_t)round(samp * audio_pwm_scale);           // Scale between -top and top
+
     if (scaled > 0) {
-        pwm_set_both_levels(AUDIO_PWM_SLICE, scaled, 0);                // scaled value > 0, drive A side
+        *cc_reg     = scaled;
     } else {
-        pwm_set_both_levels(AUDIO_PWM_SLICE, 0, -scaled);               // otherwise drive 0 or B side
+        *cc_reg     = (-scaled) << 16;
     }
 
     i_audio_buf_r   = (i_audio_buf_r + 1) & (AUDIO_BUFFER_LEN - 1);     // get next read index
 
     if ( data_offset < file_header.file_size ) {                        // if read pointer < EOF, keep reading.
-        if ( get_buff_avail()) { add1_audio_buffer(); }
-    } else {
-        if (!get_buff_avail()) { stop_audio_playback(); }               // otherwise, stop playback when EOF.
+        // add1_audio_buffer();
+        if (get_buff_readable() < LOAD_THRES) {
+            fill_audio_buffer();
+            // multicore_launch_core1(fill_audio_buffer);
+        }
+    } else {                                                            // otherwise, stop playback when EOF.
+        if (i_audio_buf_r == i_audio_buf_w) {
+            stop_audio_playback();
+        } 
     }
+}*/
+
+uint8_t downsamp_counter = 0;
+void              step_audio_isr() {
+    // isr to read next sample from audio_buffer
+    pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);                          // ch 10
+
+    // update every other PWM cycle for example.
+#ifdef DOWNSAMPLE
+    // if (downsamp_counter++ >= DOWNSAMPLE) { downsamp_counter = 0; } else { return; }
+    // audio_file.fptr += (DOWNSAMPLE - 1) << 1;
+    if (downsamp_counter ^= 1) return;
+    audio_file.fptr += 2;
+    // if ((downsamp_counter = (downsamp_counter + 1) & 0b11) != 0) { return; }
+    // audio_file.fptr += 6;
+#endif
+
+    if ( audio_file.fptr >= file_header.file_size ) {
+        stop_audio_playback();
+    }
+    
+    int16_t samp    = 0; f_read(&audio_file, (char *) &samp, 2, NULL);  // Retrieve next sample
+    int16_t scaled  = (int16_t)round(samp * audio_pwm_scale);           // Scale between -top and top
+
+    if (scaled > 0) {
+        *cc_reg     = scaled;
+    } else {
+        *cc_reg     = (-scaled) << 16;
+    }
+
+    i_audio_buf_r   = (i_audio_buf_r + 1) & (AUDIO_BUFFER_LEN - 1);     // get next read index
 }
 
 // Initialize this on core 1
@@ -367,9 +426,10 @@ void              configure_audio_play() {
     pwm_set_wrap(AUDIO_PWM_SLICE, audio_pwm_top - 1);                                   // MY TOP var is the 100% duty cc value, the hardware TOP is this minus 1.
 
     audio_pwm_frq  = PWM_GET_FRQ(audio_pwm_psc, audio_pwm_top);                         // Used freq (will differ slightly from wav_format.bits_per_samp)
-    audio_pwm_scale *= (float)(audio_pwm_top << 1) / (1 << wav_format.bits_per_samp);   // Scale between -audio_pwm_top and +audio_pwm_top
+    audio_pwm_scale = audio_base_vol *
+        (float)(audio_pwm_top << 1) / (1 << wav_format.bits_per_samp);                  // Scale between -audio_pwm_top and +audio_pwm_top
     
-    printf("(2^Bit Depth):\n    Requested top = %d at freq = %.2fkHz,\n    Best top %.3f with psc. of %.2f -> %.2f MHz,\n    Realized top %d with freq = %.3fkHz.\n",
+    printf("\n\n  configure_audio_play: wants to note Bit Depth and Sampling Rate Changes:\n    File requested top = %d at freq = %.3f kHz,\n    However, best top achieveable = %.3f using psc. of %.2f -> %.2f MHz PWM clk,\n    Using top %d with sample rate = %.3f kHz!\n",
         1 << wav_format.bits_per_samp, wav_format.sample_rate * 1e-3f,
         best_top, audio_pwm_psc, (float)BASE_CLK / audio_pwm_psc * 1e-6f,
         audio_pwm_top, audio_pwm_frq * 1e-3f

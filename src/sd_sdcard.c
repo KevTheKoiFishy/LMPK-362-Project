@@ -8,6 +8,7 @@
 #include "sd_diskio.h"
 #include "sd_sdcard.h"
 #include "sd_uart.h"
+#include "sd_audio.h"
 
 #include "hardware/watchdog.h"
 #include "watchdog.c"
@@ -343,6 +344,15 @@ void pwd(__unused int argc, __unused char *argv[])
         print_error(res, "pwd");
     else
         printf("%s\n", line);
+}
+
+void play_wav(int argc, char *argv[]) {
+    if (argc < 2) return;
+
+    char * file_path = argv[1];
+    open_sd_audio_file(file_path);
+    configure_audio_play();
+    start_audio_playback();
 }
 
 void rm(int argc, char *argv[])

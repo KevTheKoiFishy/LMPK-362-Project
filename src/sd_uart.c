@@ -117,6 +117,7 @@ struct commands_t cmds[] = {
         { "ls", ls },
         { "mkdir", mkdir },
         { "mount", mount },
+        { "play-wav", play_wav },
         { "pwd", pwd },
         { "rm", rm },
         { "restart", restart },

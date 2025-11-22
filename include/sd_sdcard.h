@@ -13,11 +13,12 @@ void mount(int argc, char *argv[]);
 void pwd(int argc, char *argv[]);
 void rm(int argc, char *argv[]);
 void cat(int argc, char *argv[]);
-void cat_hex(int argc, char *argv[]);
 void append(int argc, char *argv[]);
 void date(int argc, char *argv[]);
-
 void restart(int argc, char *argv[]);
+
+void cat_hex(int argc, char *argv[]);
+void play_wav(int argc, char *argv[]);
 bool sd_cli_running(void);
 void exit_cli(int argc, char *argv[]);
 

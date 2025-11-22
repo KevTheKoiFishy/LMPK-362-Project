@@ -54,7 +54,7 @@ int main() {
 #endif
 
 #ifdef TEST_SD_AUDIO_PLAYBACK
-    // audio_file_lseek(0x5500);
+    audio_file_lseek(0x5500);
     fill_audio_buffer();
     configure_audio_play();
     // multicore_launch_core1(&configure_audio_play);

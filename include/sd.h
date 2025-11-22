@@ -1,4 +1,4 @@
-#define SD_SPI_BAUD         20000000  // 1 MHz
+#define SD_SPI_BAUD         24000000  // 1 MHz
 #define SD_SPI_BAUD_SLOW    100000
 #define SD_SPI_USE_HIGH_SPEED
 
