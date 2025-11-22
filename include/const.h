@@ -32,8 +32,10 @@
 #define DISP_7SEG_MASK      (0x7FF << 10u)
 
 // GPS MODULE - uart1
-#define GPS_UART_TX         24
-#define GPS_UART_RX         25
+#define GPS_UART_PORT       uart1
+#define GPS_UART_IRQ        UART_IRQ_NUM(GPS_UART_PORT)
+#define GPS_PIN_TX          24
+#define GPS_PIN_RX          25
 
 // VOLUME CONTROL - adc4
 #define VOL_ADC_PIN         44
@@ -58,10 +60,10 @@
 
 // PWM AUDIO PLAYBACK - pwm10ab, pwm_irq_wrap_1
 #define BASE_CLK            150000000u
-#define AUDIO_PWM_INT_NUM   PWM_IRQ_WRAP_1
-#define AUDIO_PWM_SLICE     10
-#define AUDIO_PWM_PIN_L     36
-#define AUDIO_PWM_PIN_H     37
+#define AUDIO_PWM_INT_NUM   PWM_IRQ_WRAP_0
+#define AUDIO_PWM_SLICE     11
+#define AUDIO_PWM_PIN_L     38
+#define AUDIO_PWM_PIN_H     39
 
 /* leah:
     volume:

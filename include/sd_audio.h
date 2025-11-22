@@ -49,22 +49,35 @@ typedef struct {
 #define             DEFAULT_AUDIO_PATH  "AUDIO/SHAUN~17.WAV"
 
 // PWM Playback
-#define             PWM_CLK_PSC(sample_rate, bit_depth) BASE_CLK / sample_rate / bit_depth
+#define             CLIP(x, min, max)                   ( x < min ? min : x > max ? max : x )
+#define             ReLU(x)                             ( x < 0 ? x : 0 )
+#define             PWM_CLK_PSC(sample_rate, bit_depth) ((float)BASE_CLK / (sample_rate << bit_depth))
+#define             PWM_EST_TOP(sample_rate, psc)       ((float)BASE_CLK / (sample_rate * psc) )
+#define             PWM_GET_FRQ(psc, top)               ((float)BASE_CLK / (psc * top) )
+#define             FIXED_8p4_TO_FLOAT(x)               ((float)( ((uint16_t)x >> 4) & 0xFF ) + (float)((uint16_t)x & 0xF) * 0.0625f)
+#define             FIXED_16p8_TO_FLOAT(x)              ((float)( ((uint32_t)x >> 8) & 0xFFFF ) + (float)((uint32_t)x & 0xFF) * 0.00390625)
 
 // Buffer
-#define             AUDIO_BUFFER_LEN    512 // Make this a power of 2
+#define             AUDIO_BUFFER_LEN    256 // Make this a power of 2
 
 // Function Declarations
-void                close_sd_audio_file();
-audio_file_result   open_sd_audio_file(const char* filename);
-audio_file_result   wav_parse_headers();
+uint32_t            to_little_endian(uint32_t x);
+uint16_t            to_little_endian16(uint16_t x);
 
 uint32_t            get_data_offset();
+void                close_sd_audio_file();
+audio_file_result   reopen_sd_audio_file();
+audio_file_result   reopen_sd_audio_file();
+audio_file_result   open_sd_audio_file(const char* filename);
+audio_file_result   wav_parse_headers();
+void                audio_file_lseek(UINT b);
+
 uint16_t            get_buff_avail();
 audio_file_result   fill_audio_buffer();
-void                stop_sd_audio_read();
+audio_file_result   add1_audio_buffer();
 
-uint8_t             configure_audio_dma();
+void                step_audio_isr();
+void                configure_audio_play();
 void                start_audio_playback();
 void                stop_audio_playback();
 

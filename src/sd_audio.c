@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,13 +18,13 @@
 // INITIALIZE GLOBS  //
 
 // Audio File
-const char *        default_audio_path = DEFAULT_AUDIO_PATH;
-const char *        audio_path;
-bool                audio_file_open = false;    // Is a file open?
-FIL                 audio_file;                 // Pointer to file on drive. NOT the read/write pointer.
-FSIZE_t             data_offset = 0;            // Read/Write pointer to temporarily hold the fatFS file pointer.
-file_header_t       file_header;                // Struct for file headers.      
-wav_format_t        wav_format;                 // Struct for wave format headers.
+const        char * default_audio_path = DEFAULT_AUDIO_PATH;
+const        char * audio_path;
+             bool   audio_file_open = false;    // Is a file open?
+              FIL   audio_file;                 // Pointer to file on drive. NOT the read/write pointer.
+          FSIZE_t   data_offset = 0;            // Read/Write pointer to temporarily hold the fatFS file pointer.
+    file_header_t   file_header;                // Struct for file headers.      
+     wav_format_t   wav_format;                 // Struct for wave format headers.
 
 // Circular buffer to hold audio samples read from SD card
           int16_t   audio_buffer [AUDIO_BUFFER_LEN] = {};
@@ -32,6 +33,13 @@ volatile uint16_t   i_audio_buf_r   = 0;
 
 // Threshold to trigger start loading and stop loading more audio data
 const    uint16_t   LOAD_WHEN       = AUDIO_BUFFER_LEN >> 2;
+
+// PWM Settings
+            float   audio_pwm_psc   = -1.0;     // Fractional prescaler
+         uint16_t   audio_pwm_top   = -1;       // Actual top value
+            float   audio_pwm_frq   = -1.0;     // Actual frequency
+            float   audio_pwm_scale =  0.5;     // Actual top / bit depth top
+
 
 // HELPER FUNCTIONS //
 
@@ -58,11 +66,11 @@ uint16_t to_little_endian16(uint16_t x) {
 
 //   FILE ACCESS    //
 
-uint32_t get_data_offset() {
+uint32_t          get_data_offset() {
     return data_offset;
 }
 
-void close_sd_audio_file() {
+void              close_sd_audio_file() {
     // Close the currently open audio file, if any
     if (!audio_file_open) { return; }
     f_close(&audio_file);
@@ -184,7 +192,13 @@ audio_file_result wav_parse_headers() {
     wav_format.sample_rate   = to_little_endian  (wav_format.sample_rate  );
     wav_format.byte_rate     = to_little_endian16(wav_format.byte_rate    );
     wav_format.bytes_per_ts  = to_little_endian16(wav_format.bytes_per_ts );
-    wav_format.bits_per_samp = to_little_endian  (wav_format.bits_per_samp);      
+    wav_format.bits_per_samp = to_little_endian  (wav_format.bits_per_samp);   
+    
+    // Enforce mono audio
+    if (wav_format.num_channels != 1) {
+        printf("(ERROR) open_sd_audio_file: We only support MONO audio files right now!\n");
+        return ERR_UNSUPPORTED_TYPE;
+    }
 
     // Look for "data" marker
     do {
@@ -224,9 +238,13 @@ audio_file_result wav_parse_headers() {
     return SUCCESS;
 }
 
+void audio_file_lseek(UINT b) {
+    f_lseek(&audio_file, b);
+}
+
 //   SD -> BUFFER   //
 
-uint16_t get_buff_avail() {
+uint16_t          get_buff_avail() {
     // Get available space in audio buffer
     if (i_audio_buf_w >= i_audio_buf_r) {
         return AUDIO_BUFFER_LEN - (i_audio_buf_w - i_audio_buf_r);
@@ -253,18 +271,18 @@ audio_file_result fill_audio_buffer() {
 
     uint32_t copy_size = buff_avail << 1;
     if (i_audio_buf_w >= i_audio_buf_r) {
-        if ((fr = f_read(&audio_file, (char *) &audio_buffer, copy_size, &br)))
+        if ((fr = f_read(&audio_file, (char *) (audio_buffer + i0_audio_buf_w), copy_size, &br)))
             { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
         if (br < copy_size) { goto eof_reached; }
     } else {
         uint32_t copy_size_hi = (AUDIO_BUFFER_LEN - i0_audio_buf_w) << 1;
         uint32_t copy_size_lo = (i_audio_buf_w) << 1;
 
-        if ((fr = f_read(&audio_file, (char *) &audio_buffer, copy_size_hi, &br)))
+        if ((fr = f_read(&audio_file, (char *) (audio_buffer + i0_audio_buf_w), copy_size_hi, &br)))
             { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
         if (br < copy_size_hi) { goto eof_reached; }
 
-        if ((fr = f_read(&audio_file, (char *) &audio_buffer, copy_size_lo, &br2)))
+        if ((fr = f_read(&audio_file, (char *) audio_buffer, copy_size_lo, &br2)))
             { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
         if ((br += br2) < copy_size) { goto eof_reached; }
     }
@@ -279,42 +297,99 @@ audio_file_result fill_audio_buffer() {
     return AUDIO_READ_EOF;
 }
 
-void stop_sd_audio_read() {
-    // Stop the DMA
+audio_file_result add1_audio_buffer() {
+    if (!get_buff_avail()) { return ERR_BUFF_FULL; }
+
+    FRESULT fr;
+    UINT    br;
+
+    if ((fr = f_read(&audio_file, (char *) (audio_buffer + i_audio_buf_w), 2, &br)))
+        { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
     
-    // Stop reading audio data from SD card
-    // Triggered when buffer is full or EOF reached.
+    if (br < 2) { goto eof_reached; }
+
+    i_audio_buf_w = (i_audio_buf_w + 1) & (AUDIO_BUFFER_LEN - 1);
+    data_offset   += br;
+    return SUCCESS;
+
+    // if no shi left to copy
+    eof_reached:
+    data_offset = f_tell(&audio_file);
+    return AUDIO_READ_EOF;
 
 }
 
 //  BUFFER -> PWM   //
 
-void step_audio() {
+void              step_audio_isr() {
     // isr to read next sample from audio_buffer
+    pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);                          // ch 10
     
-    i_audio_buf_r = (i_audio_buf_r + 1) & (AUDIO_BUFFER_LEN - 1);
+    int16_t samp    = (audio_buffer[i_audio_buf_r] << 1);               // Retrieve FIFO
+    int16_t scaled  = (int16_t)round(samp * audio_pwm_scale);           // Scale between -top and top
+    if (scaled > 0) {
+        pwm_set_both_levels(AUDIO_PWM_SLICE, scaled, 0);                // scaled value > 0, drive A side
+    } else {
+        pwm_set_both_levels(AUDIO_PWM_SLICE, 0, -scaled);               // otherwise drive 0 or B side
+    }
+
+    i_audio_buf_r   = (i_audio_buf_r + 1) & (AUDIO_BUFFER_LEN - 1);     // get next read index
+
+    if ( data_offset < file_header.file_size ) {                        // if read pointer < EOF, keep reading.
+        if ( get_buff_avail()) { add1_audio_buffer(); }
+    } else {
+        if (!get_buff_avail()) { stop_audio_playback(); }               // otherwise, stop playback when EOF.
+    }
 }
 
 // Initialize this on core 1
-uint8_t configure_audio_play () {
+void              configure_audio_play() {
     // Initialize DMA to copy from spi to pwm
     gpio_set_function(AUDIO_PWM_PIN_L, GPIO_FUNC_PWM);
     gpio_set_function(AUDIO_PWM_PIN_H, GPIO_FUNC_PWM);
 
     // Set wrap interrupt
     pwm_set_irq_enabled(AUDIO_PWM_SLICE, true);
-    irq_set_exclusive_handler(AUDIO_PWM_INT_NUM, &step_audio);
+    irq_set_exclusive_handler(AUDIO_PWM_INT_NUM, &step_audio_isr);
     irq_set_enabled(AUDIO_PWM_INT_NUM, true);
     irq_set_priority(AUDIO_PWM_INT_NUM, 0);
 
-    pwm_set_wrap(AUDIO_PWM_SLICE, PWM_CLK_PSC(wav_format.sample_rate, wav_format.bits_per_samp));
+    // Set PWM Freq and Top
+
+    audio_pwm_psc = PWM_CLK_PSC(wav_format.sample_rate, wav_format.bits_per_samp);      // Estimate psc...
+    audio_pwm_psc = CLIP(audio_pwm_psc, 1.f, 256.f);
+    pwm_set_clkdiv(AUDIO_PWM_SLICE, audio_pwm_psc);
+        uint32_t real_div_reg = pwm_hw -> slice[AUDIO_PWM_SLICE].div;
+    audio_pwm_psc = FIXED_8p4_TO_FLOAT(real_div_reg);                                   // Then get true value
+
+    float best_top = PWM_EST_TOP(wav_format.sample_rate, audio_pwm_psc);                // Get theoretical top
+    audio_pwm_top  = (uint16_t)roundf(best_top);                                        // Used top value
+    pwm_set_wrap(AUDIO_PWM_SLICE, audio_pwm_top - 1);                                   // MY TOP var is the 100% duty cc value, the hardware TOP is this minus 1.
+
+    audio_pwm_frq  = PWM_GET_FRQ(audio_pwm_psc, audio_pwm_top);                         // Used freq (will differ slightly from wav_format.bits_per_samp)
+    audio_pwm_scale *= (float)(audio_pwm_top << 1) / (1 << wav_format.bits_per_samp);   // Scale between -audio_pwm_top and +audio_pwm_top
+    
+    printf("(2^Bit Depth):\n    Requested top = %d at freq = %.2fkHz,\n    Best top %.3f with psc. of %.2f -> %.2f MHz,\n    Realized top %d with freq = %.3fkHz.\n",
+        1 << wav_format.bits_per_samp, wav_format.sample_rate * 1e-3f,
+        best_top, audio_pwm_psc, (float)BASE_CLK / audio_pwm_psc * 1e-6f,
+        audio_pwm_top, audio_pwm_frq * 1e-3f
+    );
+
+    // Init both channels to 0 duty
+    pwm_set_both_levels(AUDIO_PWM_SLICE, 0, 0);
+    stop_audio_playback();
 }
 
-void start_audio_playback() {
-    // Start audio playback using the audio buffer
-    // Let freerun, will play audio as long as buffer_avail > 0
+void              start_audio_playback() {
+    gpio_set_function(AUDIO_PWM_PIN_L, GPIO_FUNC_PWM);
+    gpio_set_function(AUDIO_PWM_PIN_H, GPIO_FUNC_PWM);
+    pwm_set_enabled(AUDIO_PWM_SLICE, true);
 }
 
-void stop_audio_playback() {
-
+void              stop_audio_playback() {
+    gpio_set_function(AUDIO_PWM_PIN_L, GPIO_FUNC_SIO);
+    gpio_set_function(AUDIO_PWM_PIN_H, GPIO_FUNC_SIO);
+    gpio_put(AUDIO_PWM_PIN_L, 0);
+    gpio_put(AUDIO_PWM_PIN_H, 0);
+    pwm_set_enabled(AUDIO_PWM_SLICE, false);
 }
