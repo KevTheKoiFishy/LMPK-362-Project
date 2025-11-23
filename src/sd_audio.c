@@ -42,6 +42,7 @@ const    uint16_t   LOAD_THRES      = AUDIO_BUFFER_LEN >> 2;
             float   audio_pwm_scale = -1.0;     // Actual top / bit depth top
             float   audio_base_vol  =  0.3;     // Actual top / bit depth top
 volatile uint32_t * cc_reg          = &(pwm_hw -> slice[AUDIO_PWM_SLICE].cc);
+volatile     bool   core1_ready     = true;
 
 // HELPER FUNCTIONS //
 
@@ -115,15 +116,15 @@ audio_file_result open_sd_audio_file(const char* filename) {
     if (wfr == SUCCESS) {
         audio_file_open = true;
         printf("\n  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓");
-        printf("\n  ┃ fmt type          ┃ %8s     ┃",   wav_format.fmt_type);
+        printf("\n  ┃ fmt type          ┃ %8s     ┃",   wav_format.fmt_type == 1 ? "     PCM" : "        ");
         printf("\n  ┃ num channels      ┃ %8s     ┃",   wav_format.num_channels == 2 ? "  STEREO" : "    MONO");
         printf("\n  ┃ sample rate       ┃ %8.3f kHz ┃", wav_format.sample_rate * 1e-3f);
-        printf("\n  ┃ bytes/sec         ┃ %8d     ┃",   wav_format.byte_rate);
+        printf("\n  ┃ bytes/sec         ┃ %8ld     ┃",  wav_format.byte_rate);
         printf("\n  ┃ bytes/sample      ┃ %8d     ┃",   wav_format.bytes_per_ts);
         printf("\n  ┃ bits_per_samp     ┃ %8d     ┃",   wav_format.bits_per_samp);
-        printf("\n  ┃ data_offset_base  ┃ %8d     ┃",   wav_format.data_offset_base);
+        printf("\n  ┃ data_offset_base  ┃ %8ld     ┃",  wav_format.data_offset_base);
         printf("\n  ┃ file_size         ┃ %8.3f MiB ┃", file_header.file_size * 1e-6f);
-        printf("\n  ┃ data_size         ┃ %8d B   ┃",   wav_format.data_size);
+        printf("\n  ┃ data_size         ┃ %8ld B   ┃",  wav_format.data_size);
         printf("\n  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛");
     } else {
         f_close(&audio_file);
@@ -279,16 +280,18 @@ audio_file_result fill_audio_buffer() {
     if (!audio_file_open)  { return ERR_NO_FILE_OPEN; }
 #endif
 
-    uint32_t buff_avail = get_buff_writeable();
+    // Async func: store things that might change due to core 0 execution.
+    uint16_t i0_audio_buf_r = i_audio_buf_r;
+    uint32_t buff_avail = (i_audio_buf_w > i0_audio_buf_r)
+        ? AUDIO_BUFFER_LEN - (i_audio_buf_w - i0_audio_buf_r)
+        : i0_audio_buf_r - i_audio_buf_w;
 
-#ifdef FILL_BUFFER_ERRCHECK
     if (!buff_avail) { return ERR_BUFF_FULL; }
-#endif
-    
+
     FRESULT fr;
     UINT    br, br2;
     
-    if (i_audio_buf_w <= i_audio_buf_r) {
+    if (i_audio_buf_w <= i0_audio_buf_r) {
         uint32_t copy_size = buff_avail << 1;
         fr = f_read(&audio_file, (char *) (audio_buffer + i_audio_buf_w), copy_size, &br);
 #ifdef FILL_BUFFER_ERRCHECK
@@ -297,7 +300,7 @@ audio_file_result fill_audio_buffer() {
 #endif
     } else {
         uint32_t copy_size_hi = (AUDIO_BUFFER_LEN - i_audio_buf_w) << 1;
-        uint32_t copy_size_lo = (i_audio_buf_r) << 1;
+        uint32_t copy_size_lo = (i0_audio_buf_r) << 1;
         
         fr = f_read(&audio_file, (char *) (audio_buffer + i_audio_buf_w), copy_size_hi, &br);
 #ifdef FILL_BUFFER_ERRCHECK
@@ -312,9 +315,10 @@ audio_file_result fill_audio_buffer() {
 #endif
     }
 
-    i_audio_buf_w = i_audio_buf_r;  // (i_audio_buf_w + buff_avail) & (AUDIO_BUFFER_LEN - 1); // buff_avail mod 4096
+    i_audio_buf_w = i0_audio_buf_r;  // (i_audio_buf_w + buff_avail) & (AUDIO_BUFFER_LEN - 1); // buff_avail mod 4096
 
     data_offset   = f_tell(&audio_file);
+    core1_ready   = true;
     return SUCCESS;
 
     // if no shi left to copy
@@ -322,8 +326,13 @@ audio_file_result fill_audio_buffer() {
     eof_reached:
     i_audio_buf_w = (i_audio_buf_w + (br >> 1)) & (AUDIO_BUFFER_LEN - 1); // add however many was copied
     data_offset   = f_tell(&audio_file);
+    core1_ready   = true;
     return AUDIO_READ_EOF;
 #endif
+}
+
+void              fill_audio_buffer_void(void) {
+    fill_audio_buffer();
 }
 
 audio_file_result add1_audio_buffer() {
@@ -342,9 +351,16 @@ audio_file_result add1_audio_buffer() {
 
 //  BUFFER -> PWM   //
 
-/* void              step_audio_isr() {
+// WITH BUFFER VERSION
+void              step_audio_isr() {
     // isr to read next sample from audio_buffer
-    pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);                          // ch 10
+    pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);
+    
+    uint16_t buff_readable = get_buff_readable();
+    if (buff_readable <= 1) {
+        printf("(ERROR) step_audio_isr: Buff Empty.\n");
+        return;
+    }
     
     int16_t samp    = (audio_buffer[i_audio_buf_r] << 1);               // Retrieve FIFO
     int16_t scaled  = (int16_t)round(samp * audio_pwm_scale);           // Scale between -top and top
@@ -359,17 +375,24 @@ audio_file_result add1_audio_buffer() {
 
     if ( data_offset < file_header.file_size ) {                        // if read pointer < EOF, keep reading.
         // add1_audio_buffer();
-        if (get_buff_readable() < LOAD_THRES) {
-            fill_audio_buffer();
-            // multicore_launch_core1(fill_audio_buffer);
+        if (buff_readable < LOAD_THRES) {
+            // fill_audio_buffer();
+            if (core1_ready) {
+                multicore_launch_core1(&fill_audio_buffer_void); core1_ready = false; // Some delay in core1's triggering can lead to double-fire.
+            } else {
+                if (buff_readable == 1) {
+                    printf("(WARNING) step_audio_isr: Buffer overrun, 1 readable left but core1 not ready for buff fill.\n");
+                }
+            }
         }
     } else {                                                            // otherwise, stop playback when EOF.
         if (i_audio_buf_r == i_audio_buf_w) {
             stop_audio_playback();
         } 
     }
-}*/
+}
 
+/* // NO BUFFER VERSION
 uint8_t downsamp_counter = 0;
 void              step_audio_isr() {
     // isr to read next sample from audio_buffer
@@ -400,6 +423,7 @@ void              step_audio_isr() {
 
     i_audio_buf_r   = (i_audio_buf_r + 1) & (AUDIO_BUFFER_LEN - 1);     // get next read index
 }
+*/
 
 // Initialize this on core 1
 void              configure_audio_play() {

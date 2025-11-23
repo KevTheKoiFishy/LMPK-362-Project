@@ -58,8 +58,8 @@ typedef struct {
 #define             FIXED_16p8_TO_FLOAT(x)              ((float)( ((uint32_t)x >> 8) & 0xFFFF ) + (float)((uint32_t)x & 0xFF) * 0.00390625)
 
 // Buffer
-#define             AUDIO_BUFFER_LEN    8 // Make this a power of 2
-#define             DOWNSAMPLE          4
+#define             AUDIO_BUFFER_LEN    512 // Make this a power of 2
+#define             DOWNSAMPLE          2
 
 // Function Declarations
 uint32_t            to_little_endian(uint32_t x);

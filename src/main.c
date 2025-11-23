@@ -34,6 +34,7 @@ int main() {
     /////////////////
     // SD-AUDIO    //
     /////////////////
+    stdio_init_all(); // Enable multicore
     mount(0, NULL);
     open_sd_audio_file(DEFAULT_AUDIO_PATH);
 
