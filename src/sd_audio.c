@@ -27,9 +27,19 @@ const        char * audio_path;
      wav_format_t   wav_format;                 // Struct for wave format headers.
 
 // Circular buffer to hold audio samples read from SD card
-          int16_t   audio_buffer [AUDIO_BUFFER_LEN] = {};
-volatile uint16_t   i_audio_buf_w   = 0;
+#ifndef DOUBLE_BUFFER
+          int16_t   audio_buffer   [AUDIO_BUFFER_LEN] = {};
+#define             audio_buffer_rp    audio_buffer
+#define             audio_buffer_wp    audio_buffer
+#endif
+#ifdef DOUBLE_BUFFER
+          int16_t   audio_buffer_w [AUDIO_BUFFER_LEN] = {};
+          int16_t   audio_buffer_r [AUDIO_BUFFER_LEN] = {};
+          int16_t * audio_buffer_wp = audio_buffer_w;
+          int16_t * audio_buffer_rp = audio_buffer_r;
+#endif
 volatile uint16_t   i_audio_buf_r   = 0;
+volatile uint16_t   i_audio_buf_w   = 0;
 
 // Threshold to trigger start loading and stop loading more audio data
 // const    uint16_t   LOAD_THRES      = AUDIO_BUFFER_LEN * LOAD_THRES_RATIO;
@@ -39,7 +49,7 @@ volatile uint16_t   i_audio_buf_r   = 0;
          uint16_t   audio_pwm_top   = -1;       // Actual top value
             float   audio_pwm_frq   = -1.0;     // Actual frequency
             float   audio_pwm_scale = -1.0;     // Actual top / bit depth top
-            float   audio_base_vol  =  0.6;     // Actual top / bit depth top
+            float   audio_base_vol  =  1.0;     // Actual top / bit depth top
 volatile uint32_t * cc_reg          = &(pwm_hw -> slice[AUDIO_PWM_SLICE].cc);
 
 // So that core1 routine knows if they should update buffer.
@@ -253,6 +263,7 @@ void              audio_file_lseek(UINT b) {
 
 //   SD -> BUFFER   //
 
+#ifndef DOUBLE_BUFFER
 uint16_t          get_buff_readable() {
     // Get readable space in audio buffer
     // If write ptr = read ptr, then assume full
@@ -345,36 +356,49 @@ audio_file_result add1_audio_buffer() {
     eof_reached:
     return AUDIO_READ_EOF;
 }
+#endif
 
 void              core1_maintain_audio_buff_routine() {
     // Call on each loop of core1 main
 
     // Is audio even playing?
-    if ( !audio_playing ) {
-        /* NO!? (╥﹏╥) Why do i even bother... */
-        return;
-    }
-
-    // Hiee step_audio_isr-chan ⸜(｡˃ ᵕ ˂ )⸝♡, do you need data?
+    if ( !audio_playing ) { return; }
     if ( !audio_load_flag ) { return; }
-    // uint16_t buff_readable = get_buff_readable();
-    // if ( buff_readable >= LOAD_THRES) { return; }
-
-    // // Gah!! (˶°ㅁ°) !! Oh no!! it looks like you really need data!!
-    // if (buff_readable == 1) {
-    //     printf("(WARNING) step_audio_isr: Buffer overrun, 1 readable left when core1 got around to sd copy!\n");
-    // }
 
     // Here's your data, bb (˶˘ ³˘)♡
     if ( audio_file.fptr < file_header.file_size ) {                     // if read pointer < EOf
-        f_read(&audio_file, (char *) (audio_buffer + 0x000), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer + 0x200), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer + 0x400), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer + 0x600), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer + 0x800), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer + 0xA00), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer + 0xC00), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer + 0xE00), 1024, NULL);
+        // for (int i = 0; i < AUDIO_BUFFER_LEN; i += 0x200) {
+        //     f_read(&audio_file, (char *) (audio_buffer_wp + i), 0x200, NULL);
+        // }
+#if AUDIO_BUFFER_LEN <  512
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0000), AUDIO_BUFFER_LEN << 1, NULL);
+#endif
+#if AUDIO_BUFFER_LEN >= 512
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0000), 1024, NULL);
+#endif
+#if AUDIO_BUFFER_LEN >= 1024
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0200), 1024, NULL);
+#endif
+#if AUDIO_BUFFER_LEN >= 2048
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0400), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0600), 1024, NULL);
+#endif
+#if AUDIO_BUFFER_LEN >= 4096
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0800), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0A00), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0C00), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0E00), 1024, NULL);
+#endif
+#if AUDIO_BUFFER_LEN >= 8192
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1000), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1200), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1400), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1600), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1800), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1A00), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1C00), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1E00), 1024, NULL);
+#endif
     } else {
         stop_audio_playback();
         close_sd_audio_file();
@@ -394,8 +418,8 @@ void              step_audio_isr() {
     //     printf("(ERROR) step_audio_isr: Buff Empty.\n");
     //     return;
     // }
-    
-    int16_t samp    = (audio_buffer[i_audio_buf_r]);               // Retrieve FIFO
+
+    int16_t samp    = (audio_buffer_rp[i_audio_buf_r]);               // Retrieve FIFO
     int16_t scaled  = (int16_t)round(samp * audio_pwm_scale);           // Scale between -top and top
 
     if (scaled > 0) {
@@ -404,9 +428,23 @@ void              step_audio_isr() {
         *cc_reg     = (-scaled) << 16;
     }
 
-    i_audio_buf_r   = (i_audio_buf_r + 1) & (AUDIO_BUFFER_LEN - 1);     // get next read index
+    ++i_audio_buf_r;
 
-    if (i_audio_buf_r == LOAD_WHEN) { audio_load_flag = true; }
+#ifndef DOUBLE_BUFFER
+    if (i_audio_buf_r == LOAD_WHEN) {
+        audio_load_flag = true;
+    }
+#endif
+
+    if (i_audio_buf_r >= AUDIO_BUFFER_LEN) {
+        i_audio_buf_r   = 0;
+#ifdef DOUBLE_BUFFER
+        audio_load_flag = true;
+        int16_t * temp  = audio_buffer_wp;
+        audio_buffer_wp = audio_buffer_rp;
+        audio_buffer_rp = temp;
+#endif
+    }
 }
 // */
 

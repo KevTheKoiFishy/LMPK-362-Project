@@ -62,7 +62,8 @@ typedef struct {
 // #define             DOWNSAMPLE          2
 // #define             LOAD_THRES_RATIO    1 / 2
 // #define             LOAD_THRES          420
-#define             LOAD_WHEN           0xC00
+#define             LOAD_WHEN           AUDIO_BUFFER_LEN * 7 / 8
+// #define             DOUBLE_BUFFER
 
 // Function Declarations
 uint32_t            to_little_endian(uint32_t x);
