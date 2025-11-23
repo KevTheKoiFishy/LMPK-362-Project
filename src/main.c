@@ -11,6 +11,14 @@
 // #define  TEST_SD_READ_RATE
 #define TEST_SD_AUDIO_PLAYBACK
 
+void core_1_main() {
+    core1_loop:
+
+    core1_maintain_audio_buff_routine();
+    
+    goto core1_loop;
+}
+
 int main() {
 
     // SETUP AND INTERRUPTS HERE
@@ -18,6 +26,12 @@ int main() {
      * SD Card Initialization
      * SD Card-Audio Initialization
     */
+
+    /////////////////
+    // MULTICORE!  //
+    /////////////////
+    stdio_init_all(); // Enable multicore
+    multicore_launch_core1(&core_1_main);
 
     /////////////////
     // SD CARD     //
@@ -34,7 +48,6 @@ int main() {
     /////////////////
     // SD-AUDIO    //
     /////////////////
-    stdio_init_all(); // Enable multicore
     mount(0, NULL);
     open_sd_audio_file(DEFAULT_AUDIO_PATH);
 
@@ -56,9 +69,8 @@ int main() {
 
 #ifdef TEST_SD_AUDIO_PLAYBACK
     audio_file_lseek(0x5500);
-    fill_audio_buffer();
+    // fill_audio_buffer();
     configure_audio_play();
-    // multicore_launch_core1(&configure_audio_play);
     start_audio_playback();
 #endif
 
@@ -67,8 +79,10 @@ int main() {
      * Display Rendering and Refersh
      */
 
-    while (1){
+    core0_loop:
         
-    }
+    
+
+    goto core0_loop;
     
 }

@@ -23,7 +23,6 @@ const        char * default_audio_path = DEFAULT_AUDIO_PATH;
 const        char * audio_path;
              bool   audio_file_open = false;    // Is a file open?
               FIL   audio_file;                 // Pointer to file on drive. NOT the read/write pointer.
-          FSIZE_t   data_offset = 0;            // Read/Write pointer to temporarily hold the fatFS file pointer.
     file_header_t   file_header;                // Struct for file headers.      
      wav_format_t   wav_format;                 // Struct for wave format headers.
 
@@ -33,16 +32,18 @@ volatile uint16_t   i_audio_buf_w   = 0;
 volatile uint16_t   i_audio_buf_r   = 0;
 
 // Threshold to trigger start loading and stop loading more audio data
-const    uint16_t   LOAD_THRES      = AUDIO_BUFFER_LEN >> 2;
+// const    uint16_t   LOAD_THRES      = AUDIO_BUFFER_LEN * LOAD_THRES_RATIO;
 
 // PWM Settings
             float   audio_pwm_psc   = -1.0;     // Fractional prescaler
          uint16_t   audio_pwm_top   = -1;       // Actual top value
             float   audio_pwm_frq   = -1.0;     // Actual frequency
             float   audio_pwm_scale = -1.0;     // Actual top / bit depth top
-            float   audio_base_vol  =  0.3;     // Actual top / bit depth top
+            float   audio_base_vol  =  0.6;     // Actual top / bit depth top
 volatile uint32_t * cc_reg          = &(pwm_hw -> slice[AUDIO_PWM_SLICE].cc);
-volatile     bool   core1_ready     = true;
+
+// So that core1 routine knows if they should update buffer.
+            bool    audio_playing   = false;
 
 // HELPER FUNCTIONS //
 
@@ -69,10 +70,6 @@ uint16_t to_little_endian16(uint16_t x) {
 
 //   FILE ACCESS    //
 
-uint32_t          get_data_offset() {
-    return data_offset;
-}
-
 void              close_sd_audio_file() {
     // Close the currently open audio file, if any
     if (!audio_file_open) { return; }
@@ -81,7 +78,7 @@ void              close_sd_audio_file() {
 }
 
 audio_file_result reopen_sd_audio_file() {
-    data_offset = f_tell(&audio_file);
+    uint32_t data_offset = f_tell(&audio_file);
     f_close(&audio_file);
 
     FRESULT fr;
@@ -245,12 +242,11 @@ audio_file_result wav_parse_headers() {
 
     // Record where data starts
     wav_format.data_offset_base = header_br;
-    data_offset = f_tell(&audio_file);
 
     return SUCCESS;
 }
 
-void audio_file_lseek(UINT b) {
+void              audio_file_lseek(UINT b) {
     f_lseek(&audio_file, b);
 }
 
@@ -282,15 +278,19 @@ audio_file_result fill_audio_buffer() {
 
     // Async func: store things that might change due to core 0 execution.
     uint16_t i0_audio_buf_r = i_audio_buf_r;
+
+    // Compute number of writeable positions in circular buffer
     uint32_t buff_avail = (i_audio_buf_w > i0_audio_buf_r)
         ? AUDIO_BUFFER_LEN - (i_audio_buf_w - i0_audio_buf_r)
         : i0_audio_buf_r - i_audio_buf_w;
 
+    // Don't copy anything if buffer is full
     if (!buff_avail) { return ERR_BUFF_FULL; }
 
     FRESULT fr;
     UINT    br, br2;
     
+    // If read ptr is ahead of write ptr, copy from write ptr to read ptr.
     if (i_audio_buf_w <= i0_audio_buf_r) {
         uint32_t copy_size = buff_avail << 1;
         fr = f_read(&audio_file, (char *) (audio_buffer + i_audio_buf_w), copy_size, &br);
@@ -298,7 +298,11 @@ audio_file_result fill_audio_buffer() {
         if (fr) { printf("(ERROR) fill_audio_buffer\n    "); print_error(fr, "FatFS says"); }
         if (br < copy_size) { goto eof_reached; }
 #endif
-    } else {
+    }
+
+    // if read ptr is behind write ptr,
+    // copy from write ptr to end, then loop around and copy to read ptr.
+    else {
         uint32_t copy_size_hi = (AUDIO_BUFFER_LEN - i_audio_buf_w) << 1;
         uint32_t copy_size_lo = (i0_audio_buf_r) << 1;
         
@@ -315,24 +319,18 @@ audio_file_result fill_audio_buffer() {
 #endif
     }
 
+    // Update write ptr position!
     i_audio_buf_w = i0_audio_buf_r;  // (i_audio_buf_w + buff_avail) & (AUDIO_BUFFER_LEN - 1); // buff_avail mod 4096
 
-    data_offset   = f_tell(&audio_file);
-    core1_ready   = true;
     return SUCCESS;
 
     // if no shi left to copy
 #ifdef FILL_BUFFER_ERRCHECK
     eof_reached:
     i_audio_buf_w = (i_audio_buf_w + (br >> 1)) & (AUDIO_BUFFER_LEN - 1); // add however many was copied
-    data_offset   = f_tell(&audio_file);
     core1_ready   = true;
     return AUDIO_READ_EOF;
 #endif
-}
-
-void              fill_audio_buffer_void(void) {
-    fill_audio_buffer();
 }
 
 audio_file_result add1_audio_buffer() {
@@ -341,26 +339,51 @@ audio_file_result add1_audio_buffer() {
     UINT br; f_read(&audio_file, (char *) (audio_buffer + i_audio_buf_w), 2, &br); if (br < 2) { goto eof_reached; }
 
     i_audio_buf_w = (i_audio_buf_w + 1) & (AUDIO_BUFFER_LEN - 1);
-    data_offset   += br;
     return SUCCESS;
 
     eof_reached:
-    data_offset = f_tell(&audio_file);
     return AUDIO_READ_EOF;
+}
+
+void              core1_maintain_audio_buff_routine() {
+    // Call on each loop of core1 main
+
+    // Is audio even playing?
+    if ( !audio_playing ) {
+        /* NO!? (╥﹏╥) Why do i even bother... */
+        return;
+    }
+
+    // Hiee step_audio_isr-chan ⸜(｡˃ ᵕ ˂ )⸝♡, do you need data?
+    uint16_t buff_readable = get_buff_readable();
+    if ( buff_readable >= LOAD_THRES) { return; }
+
+    // Gah!! (˶°ㅁ°) !! Oh no!! it looks like you really need data!!
+    if (buff_readable == 1) {
+        printf("(WARNING) step_audio_isr: Buffer overrun, 1 readable left when core1 got around to sd copy!\n");
+    }
+
+    // Here's your data, bb (˶˘ ³˘)♡
+    if ( audio_file.fptr < file_header.file_size ) {                     // if read pointer < EOF
+        fill_audio_buffer();
+    } else {
+        stop_audio_playback();
+        close_sd_audio_file();
+    }
 }
 
 //  BUFFER -> PWM   //
 
-// WITH BUFFER VERSION
+// /* WITH BUFFER VERSION
 void              step_audio_isr() {
     // isr to read next sample from audio_buffer
     pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);
     
-    uint16_t buff_readable = get_buff_readable();
-    if (buff_readable <= 1) {
-        printf("(ERROR) step_audio_isr: Buff Empty.\n");
-        return;
-    }
+    // uint16_t buff_readable = get_buff_readable();
+    // if (buff_readable <= 1) {
+    //     printf("(ERROR) step_audio_isr: Buff Empty.\n");
+    //     return;
+    // }
     
     int16_t samp    = (audio_buffer[i_audio_buf_r] << 1);               // Retrieve FIFO
     int16_t scaled  = (int16_t)round(samp * audio_pwm_scale);           // Scale between -top and top
@@ -373,30 +396,15 @@ void              step_audio_isr() {
 
     i_audio_buf_r   = (i_audio_buf_r + 1) & (AUDIO_BUFFER_LEN - 1);     // get next read index
 
-    if ( data_offset < file_header.file_size ) {                        // if read pointer < EOF, keep reading.
-        // add1_audio_buffer();
-        if (buff_readable < LOAD_THRES) {
-            // fill_audio_buffer();
-            if (core1_ready) {
-                multicore_launch_core1(&fill_audio_buffer_void); core1_ready = false; // Some delay in core1's triggering can lead to double-fire.
-            } else {
-                if (buff_readable == 1) {
-                    printf("(WARNING) step_audio_isr: Buffer overrun, 1 readable left but core1 not ready for buff fill.\n");
-                }
-            }
-        }
-    } else {                                                            // otherwise, stop playback when EOF.
-        if (i_audio_buf_r == i_audio_buf_w) {
-            stop_audio_playback();
-        } 
-    }
 }
+// */
 
-/* // NO BUFFER VERSION
+/* NO BUFFER VERSION
 uint8_t downsamp_counter = 0;
 void              step_audio_isr() {
     // isr to read next sample from audio_buffer
     pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);                          // ch 10
+    if ( !audio_playing ) { return; }
 
     // update every other PWM cycle for example.
 #ifdef DOWNSAMPLE
@@ -420,12 +428,9 @@ void              step_audio_isr() {
     } else {
         *cc_reg     = (-scaled) << 16;
     }
-
-    i_audio_buf_r   = (i_audio_buf_r + 1) & (AUDIO_BUFFER_LEN - 1);     // get next read index
 }
-*/
+// */
 
-// Initialize this on core 1
 void              configure_audio_play() {
     // Initialize DMA to copy from spi to pwm
     gpio_set_function(AUDIO_PWM_PIN_L, GPIO_FUNC_PWM);
@@ -468,6 +473,7 @@ void              start_audio_playback() {
     gpio_set_function(AUDIO_PWM_PIN_L, GPIO_FUNC_PWM);
     gpio_set_function(AUDIO_PWM_PIN_H, GPIO_FUNC_PWM);
     pwm_set_enabled(AUDIO_PWM_SLICE, true);
+    audio_playing = true;
 }
 
 void              stop_audio_playback() {
@@ -476,4 +482,5 @@ void              stop_audio_playback() {
     gpio_put(AUDIO_PWM_PIN_L, 0);
     gpio_put(AUDIO_PWM_PIN_H, 0);
     pwm_set_enabled(AUDIO_PWM_SLICE, false);
+    audio_playing = false;
 }
