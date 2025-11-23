@@ -44,6 +44,7 @@ volatile uint32_t * cc_reg          = &(pwm_hw -> slice[AUDIO_PWM_SLICE].cc);
 
 // So that core1 routine knows if they should update buffer.
             bool    audio_playing   = false;
+            bool    audio_load_flag = true;
 
 // HELPER FUNCTIONS //
 
@@ -355,21 +356,30 @@ void              core1_maintain_audio_buff_routine() {
     }
 
     // Hiee step_audio_isr-chan ⸜(｡˃ ᵕ ˂ )⸝♡, do you need data?
-    uint16_t buff_readable = get_buff_readable();
-    if ( buff_readable >= LOAD_THRES) { return; }
+    if ( !audio_load_flag ) { return; }
+    // uint16_t buff_readable = get_buff_readable();
+    // if ( buff_readable >= LOAD_THRES) { return; }
 
-    // Gah!! (˶°ㅁ°) !! Oh no!! it looks like you really need data!!
-    if (buff_readable == 1) {
-        printf("(WARNING) step_audio_isr: Buffer overrun, 1 readable left when core1 got around to sd copy!\n");
-    }
+    // // Gah!! (˶°ㅁ°) !! Oh no!! it looks like you really need data!!
+    // if (buff_readable == 1) {
+    //     printf("(WARNING) step_audio_isr: Buffer overrun, 1 readable left when core1 got around to sd copy!\n");
+    // }
 
     // Here's your data, bb (˶˘ ³˘)♡
-    if ( audio_file.fptr < file_header.file_size ) {                     // if read pointer < EOF
-        fill_audio_buffer();
+    if ( audio_file.fptr < file_header.file_size ) {                     // if read pointer < EOf
+        f_read(&audio_file, (char *) (audio_buffer + 0x000), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer + 0x200), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer + 0x400), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer + 0x600), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer + 0x800), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer + 0xA00), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer + 0xC00), 1024, NULL);
+        f_read(&audio_file, (char *) (audio_buffer + 0xE00), 1024, NULL);
     } else {
         stop_audio_playback();
         close_sd_audio_file();
     }
+    audio_load_flag = false;
 }
 
 //  BUFFER -> PWM   //
@@ -385,7 +395,7 @@ void              step_audio_isr() {
     //     return;
     // }
     
-    int16_t samp    = (audio_buffer[i_audio_buf_r] << 1);               // Retrieve FIFO
+    int16_t samp    = (audio_buffer[i_audio_buf_r]);               // Retrieve FIFO
     int16_t scaled  = (int16_t)round(samp * audio_pwm_scale);           // Scale between -top and top
 
     if (scaled > 0) {
@@ -396,6 +406,7 @@ void              step_audio_isr() {
 
     i_audio_buf_r   = (i_audio_buf_r + 1) & (AUDIO_BUFFER_LEN - 1);     // get next read index
 
+    if (i_audio_buf_r == LOAD_WHEN) { audio_load_flag = true; }
 }
 // */
 
