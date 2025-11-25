@@ -59,11 +59,13 @@ typedef struct {
 
 // Buffer
 #define             AUDIO_BUFFER_LEN    8192 // Make this a power of 2
+#define             BUFF_MAX_I          8191
 // #define             DOWNSAMPLE          2
 // #define             LOAD_THRES_RATIO    1 / 2
 // #define             LOAD_THRES          420
-#define             LOAD_WHEN           AUDIO_BUFFER_LEN - 420
+// #define             LOAD_WHEN           (AUDIO_BUFFER_LEN - 200)
 #define             DOUBLE_BUFFER
+#define             AUDIO_COPY_LEN      1024 // Change to 512 if you start getting hardware faults
 
 // Function Declarations
 uint32_t            to_little_endian(uint32_t x);
@@ -80,6 +82,7 @@ uint16_t            get_buff_readable();
 uint16_t            get_buff_writeable();
 audio_file_result   fill_audio_buffer();
 audio_file_result   add1_audio_buffer();
+void                fill_audio_buffer_s_to_f();
 void                core1_maintain_audio_buff_routine();
 
 void                step_audio_isr();

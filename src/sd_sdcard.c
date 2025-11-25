@@ -352,6 +352,7 @@ void play_wav(int argc, char *argv[]) {
     char * file_path = argv[1];
     open_sd_audio_file(file_path);
     configure_audio_play();
+    fill_audio_buffer_s_to_f();
     start_audio_playback();
 }
 

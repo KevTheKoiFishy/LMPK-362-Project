@@ -33,16 +33,13 @@ const        char * audio_path;
 #define             audio_buffer_wp    audio_buffer
 #endif
 #ifdef DOUBLE_BUFFER
-          int16_t   audio_buffer_w [AUDIO_BUFFER_LEN] = {};
-          int16_t   audio_buffer_r [AUDIO_BUFFER_LEN] = {};
+          int16_t   audio_buffer_w [AUDIO_BUFFER_LEN + 2] = {};
+          int16_t   audio_buffer_r [AUDIO_BUFFER_LEN + 2] = {};
           int16_t * audio_buffer_wp = audio_buffer_w;
           int16_t * audio_buffer_rp = audio_buffer_r;
 #endif
 volatile uint32_t   i_audio_buf_r   = 0;
 volatile uint32_t   i_audio_buf_w   = 0;
-
-// Threshold to trigger start loading and stop loading more audio data
-// const    uint16_t   LOAD_THRES      = AUDIO_BUFFER_LEN * LOAD_THRES_RATIO;
 
 // PWM Settings
             float   audio_pwm_psc   = -1.0;     // Fractional prescaler
@@ -55,6 +52,8 @@ volatile uint32_t * cc_reg          = &(pwm_hw -> slice[AUDIO_PWM_SLICE].cc);
 // So that core1 routine knows if they should update buffer.
             bool    audio_playing   = false;
             bool    audio_load_flag = true;
+// Core1 -> core0 flags
+            bool    audio_copying   = false;
 
 // HELPER FUNCTIONS //
 
@@ -358,14 +357,12 @@ audio_file_result add1_audio_buffer() {
 }
 #endif
 
-void              core1_maintain_audio_buff_routine() {
-    // Call on each loop of core1 main
-
-    // Is audio even playing?
-    if ( !audio_playing ) { return; }
-    if ( !audio_load_flag ) { return; }
+void              fill_audio_buffer_s_to_f() {
+    audio_copying = true;
+    printf("     %5ld, ", i_audio_buf_r);
 
     // Here's your data, bb (˶˘ ³˘)♡
+    #if AUDIO_COPY_LEN == 1024
     #if AUDIO_BUFFER_LEN <  512
         f_read(&audio_file, (char *) (audio_buffer_wp + 0x0000), AUDIO_BUFFER_LEN << 1, NULL);
     #endif
@@ -395,24 +392,69 @@ void              core1_maintain_audio_buff_routine() {
         f_read(&audio_file, (char *) (audio_buffer_wp + 0x1C00), 1024, NULL);
         f_read(&audio_file, (char *) (audio_buffer_wp + 0x1E00), 1024, NULL);
     #endif
-    #if AUDIO_BUFFER_LEN >= 16384
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2000), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2200), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2400), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2600), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2800), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2A00), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2C00), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2E00), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2000), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2200), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2400), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2600), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2800), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2A00), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2C00), 1024, NULL);
-        f_read(&audio_file, (char *) (audio_buffer_wp + 0x2E00), 1024, NULL);
+    #elif AUDIO_COPY_LEN == 512
+    #if AUDIO_BUFFER_LEN <  256
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0000), AUDIO_BUFFER_LEN << 1, NULL);
     #endif
+    #if AUDIO_BUFFER_LEN >= 256
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0000), 512, NULL);
+    #endif
+    #if AUDIO_BUFFER_LEN >= 512
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0100), 512, NULL);
+    #endif
+    #if AUDIO_BUFFER_LEN >= 1024
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0200), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0300), 512, NULL);
+    #endif
+    #if AUDIO_BUFFER_LEN >= 2048
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0400), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0500), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0600), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0700), 512, NULL);
+    #endif
+    #if AUDIO_BUFFER_LEN >= 4096
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0800), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0900), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0A00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0B00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0C00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0D00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0E00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x0F00), 512, NULL);
+    #endif
+    #if AUDIO_BUFFER_LEN >= 8192
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1000), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1100), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1200), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1300), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1400), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1500), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1600), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1700), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1800), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1900), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1A00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1B00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1C00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1D00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1E00), 512, NULL);
+        f_read(&audio_file, (char *) (audio_buffer_wp + 0x1F00), 512, NULL);
+    #endif
+    #endif
+
+    uint32_t read_ptr_f = i_audio_buf_r;
+    printf("%5ld.\n", read_ptr_f);
+    audio_copying = false;
+}
+
+void              core1_maintain_audio_buff_routine() {
+    // Call on each loop of core1 main
+
+    // Is audio even playing?
+    if ( !audio_playing ) { return; }
+    if ( !audio_load_flag ) { return; }
+
+    fill_audio_buffer_s_to_f();
 
     if ( audio_file.fptr >= file_header.file_size ) {
         stop_audio_playback();
@@ -443,17 +485,20 @@ void              step_audio_isr() {
         *cc_reg     = (-scaled) << 16;
     }
 
-    ++i_audio_buf_r;
+    i_audio_buf_r = (i_audio_buf_r + 1) & (BUFF_MAX_I);
 
-    if (i_audio_buf_r >= AUDIO_BUFFER_LEN) {
-        i_audio_buf_r   = 0;
-        #ifdef DOUBLE_BUFFER
+    #ifdef DOUBLE_BUFFER
+    if (i_audio_buf_r == 0) {
         int16_t * temp  = audio_buffer_wp;
         audio_buffer_wp = audio_buffer_rp;
         audio_buffer_rp = temp;
+
+        if (audio_copying) {
+            printf("(WARNING) step_audio_isr: Buffer overrun!\n");
+        }
         audio_load_flag = true;
-        #endif
     }
+    #endif
 
     #ifndef DOUBLE_BUFFER
     if (i_audio_buf_r == LOAD_WHEN) {
