@@ -7,16 +7,20 @@
 
 #include "const.h"
 #include "gps_uart.h"
+#include "gps_time.h"
 
 #define     GPS_UART_BUFSIZE          256
 char        gps_serbuf[GPS_UART_BUFSIZE];
 int         gps_seridx              =  0;
-int         gps_newline_seen        =  0;
+
+uart_hw_t * gps_uart;
 
 // Initialize SPI1 on GPS pins.
 void init_gps_uart() {
-    gpio_set_function(GPS_PIN_RX, UART_FUNCSEL_NUM(GPS_UART_PORT, GPS_PIN_RX));
-    gpio_set_function(GPS_PIN_TX, UART_FUNCSEL_NUM(GPS_UART_PORT, GPS_PIN_TX));
+    gps_uart = uart_get_hw(GPS_UART_PORT);
+
+    gpio_set_function(GPS_PIN_RX, GPIO_FUNC_UART);
+    gpio_set_function(GPS_PIN_TX, GPIO_FUNC_UART);
 
     uart_set_translate_crlf(GPS_UART_PORT, PICO_UART_DEFAULT_CRLF);
 
@@ -35,65 +39,46 @@ void init_gps_uart() {
 
 // Read from GPS and pipe to terminal
 void gps_uart_rx_handler() {
-    // Prevent buffer overflow
-    if (gps_seridx >= GPS_UART_BUFSIZE) { return; }
-
-    uart_hw_t * gps_uart = uart_get_hw(GPS_UART_PORT);
-
-    // Trigger only if received data
-    if (!(gps_uart -> mis & UART_UARTMIS_RXMIS_BITS)) { return; }
-
-    // Ack
-    gps_uart -> icr = UART_UARTICR_RXIC_BITS;
 
     // Reading from register will also clear the intr
     uint16_t rcv = gps_uart -> dr & 0x7FF;
     uint8_t  err = rcv >> 8; if (err) { return; }
     uint8_t  ch  = rcv & 0xFF;
 
+    // Prevent buffer overflow
+    if (gps_seridx >= GPS_UART_BUFSIZE) { return; }
+
     // Track newline
-    gps_newline_seen = ch == '\n';
+    if (ch == '\n') {
+        gps_parseline(gps_serbuf, gps_seridx);
+        gps_seridx = 0;
+    }
 
     // Handle backspace
     if (ch == '\b') {
         if (gps_seridx == 0) { return; }
         
+        #ifdef GPS_UART_ECHO
         UART_WAIT(); uart0_hw -> dr = '\b';
         UART_WAIT(); uart0_hw -> dr = ' '; 
         UART_WAIT(); uart0_hw -> dr = '\b';
+        #endif
 
         gps_serbuf[--gps_seridx] = (char)'\0';
     }
     // Handle echo
     else {
-        uart0_hw -> dr   = ch;
+        #ifdef GPS_UART_ECHO
+        UART_WAIT(); uart0_hw -> dr = ch;
+        #endif
+        
         gps_serbuf[gps_seridx++] = ch;
     }
 }
 
-// Read from GPS
-int gps_uart_readline(__unused int handle, char *buffer, int length) {
-    // Wait for delimiter
-    while (!gps_newline_seen) { sleep_ms(5); }
-    gps_newline_seen = false;
-
-    buffer[gps_seridx] = '\0';
-    // Strcpy and reset serbuf
-    do {
-        --gps_seridx;
-        buffer[gps_seridx] = gps_serbuf[gps_seridx];
-        gps_serbuf[gps_seridx] = 0;
-    }
-    while (gps_seridx);
-
-    return length;
-}
-
 // Write to GPS
-int gps_uart_writebuf(__unused int handle, char *buffer, int length) {
-    uint8_t i;
-    for (i = 0; i < length; ++i) {
-        uart_putc(GPS_UART_PORT, buffer[i]);
+void gps_uart_writebuf(char *buffer, uint16_t length) {
+    for (uint16_t i = 0; i < length; ++i) {
+        GPS_UART_WAIT(); gps_uart -> dr = buffer[i];
     }
-    return i;
 }

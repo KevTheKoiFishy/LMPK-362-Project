@@ -13,6 +13,7 @@
 #define GET_CORE_NUM()      *(uint32_t *) (SIO_BASE + SIO_CPUID_OFFSET)
 #define ADC_WAIT()          while ( !(adc_hw -> cs & ADC_CS_READY_BITS) )
 #define UART_WAIT()         while (!uart_is_writable(uart0)) { tight_loop_contents(); }
+#define GPS_UART_WAIT()     while (!uart_is_writable(uart1)) { tight_loop_contents(); }
 
 /*** FORMAT                         ***/
 /*** FUNCTIONALITY - resources used ***/
