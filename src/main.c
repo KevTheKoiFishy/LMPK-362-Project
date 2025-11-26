@@ -10,10 +10,10 @@
 #include "gps_uart.h"
 #include "gps_time.h"
 
-// #define TEST_SD_CMD
+#define TEST_SD_CMD
 // #define TEST_SD_READ_RATE
 // #define TEST_SD_AUDIO_PLAYBACK
-# define TEST_GPS_TIME
+// # define TEST_GPS_TIME
 
 void core_1_main() {
     core1_loop:
@@ -80,13 +80,15 @@ int main() {
     /////////////////
     // GPS-UART    //
     /////////////////
-    init_gps_uart();
+    init_gps_uart(); // GPS time updates automatically!!
 
     core0_loop:
         #ifdef TEST_GPS_TIME
             sleep_ms(1000);
             printf("\nGPS Time: "); printf(gps_get_timestr()); printf("\n\n");
         #endif
+
+
     goto core0_loop;
     
 }

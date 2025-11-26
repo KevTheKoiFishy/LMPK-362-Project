@@ -289,7 +289,7 @@ void ls(int argc, char *argv[])
             res = f_readdir(&dir, &fno);                   /* Read a directory item */
             if (res != FR_OK || fno.fname[0] == 0) break;  /* Break on error or end of dir */
             if (info) {
-                printf("%04d-%s-%02d %02d:%02d:%02d %6ld %c%c%c%c%c ",
+                printf("%04d-%s-%02d %02d:%02d:%02d %12ld %c%c%c%c%c ",
                         (fno.fdate >> 9) + 1980,
                         month_name[fno.fdate >> 5 & 15],
                         fno.fdate & 31,
@@ -346,14 +346,43 @@ void pwd(__unused int argc, __unused char *argv[])
         printf("%s\n", line);
 }
 
-void play_wav(int argc, char *argv[]) {
-    if (argc < 2) return;
+void play_wav_print_man() {
+    printf("Usage: play-wav [operation] [file_path]\n");
+    printf("    operation:\n");
+    printf("        play:   Start play from beginning\n");
+    printf("        pause:  Pause audio\n");
+    printf("        seek:   Seek to time specified\n");
+    printf("        stop:   Pause audio and close file\n");
+    printf("    file_path: Relative path of WAV file.\n");
+}
 
-    char * file_path = argv[1];
-    open_sd_audio_file(file_path);
-    configure_audio_play();
-    fill_audio_buffer_s_to_f();
-    start_audio_playback();
+void play_wav(int argc, char *argv[]) {
+    if (argc < 2) {
+        printf("Operation Not Specified.\n");
+        play_wav_print_man();
+        return;
+    }
+
+    if (!strcmp(argv[1], "play")){
+        if (argc < 3) {
+            printf("Filepath Not Specified.\n");
+            play_wav_print_man();
+            return;
+        }
+        char * file_path = argv[2];
+        if (open_sd_audio_file(file_path) != SUCCESS) { return; }
+        configure_audio_play();
+        init_audio_buffer();
+        start_audio_playback();
+    } else if (!strcmp(argv[1], "stop")){
+        stop_audio_playback();
+        close_sd_audio_file();
+    } else {
+        printf("Operation \"%s\" not supported.\n", argv[1]);
+        play_wav_print_man();
+        return;
+    }
+    
 }
 
 void rm(int argc, char *argv[])

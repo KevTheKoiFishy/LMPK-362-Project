@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "ministring.h"
 #include "pico/time.h"
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
@@ -111,7 +112,7 @@ audio_file_result open_sd_audio_file(const char* filename) {
     // Store in audio_file global variable
     FRESULT fr;
     if ( (fr = f_open(&audio_file, filename, FA_READ)) ) {
-        print_error(fr, "(ERROR) open_sd_audio_file: ");
+        print_error(fr, "\n  (ERROR) open_sd_audio_file");
         return ERR_ON_FILE_OPEN;
     }
 
@@ -122,17 +123,17 @@ audio_file_result open_sd_audio_file(const char* filename) {
 
     if (wfr == SUCCESS) {
         audio_file_open = true;
-        printf("\n  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓");
-        printf("\n  ┃ fmt type          ┃ %8s     ┃",   wav_format.fmt_type == 1 ? "     PCM" : "        ");
-        printf("\n  ┃ num channels      ┃ %8s     ┃",   wav_format.num_channels == 2 ? "  STEREO" : "    MONO");
-        printf("\n  ┃ sample rate       ┃ %8.3f kHz ┃", wav_format.sample_rate * 1e-3f);
-        printf("\n  ┃ bytes/sec         ┃ %8ld     ┃",  wav_format.byte_rate);
-        printf("\n  ┃ bytes/sample      ┃ %8d     ┃",   wav_format.bytes_per_ts);
-        printf("\n  ┃ bits_per_samp     ┃ %8d     ┃",   wav_format.bits_per_samp);
-        printf("\n  ┃ data_offset_base  ┃ %8ld     ┃",  wav_format.data_offset_base);
-        printf("\n  ┃ file_size         ┃ %8.3f MiB ┃", file_header.file_size * 1e-6f);
-        printf("\n  ┃ data_size         ┃ %8ld B   ┃",  wav_format.data_size);
-        printf("\n  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛");
+        printf("\n  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓");
+        printf("\n  ┃ fmt type          ┃   %8s     ┃",   wav_format.fmt_type == 1 ? "     PCM" : "        ");
+        printf("\n  ┃ num channels      ┃   %8s     ┃",   wav_format.num_channels == 2 ? "  STEREO" : "    MONO");
+        printf("\n  ┃ sample rate       ┃   %8.3f kHz ┃", wav_format.sample_rate * 1e-3f);
+        printf("\n  ┃ bytes/sec         ┃   %8ld     ┃",  wav_format.byte_rate);
+        printf("\n  ┃ bytes/sample      ┃   %8d     ┃",   wav_format.bytes_per_ts);
+        printf("\n  ┃ bits_per_samp     ┃   %8d     ┃",   wav_format.bits_per_samp);
+        printf("\n  ┃ data_offset_base  ┃   %8ld     ┃",  wav_format.data_offset_base);
+        printf("\n  ┃ file_size         ┃   %8.3f MiB ┃", file_header.file_size * 1e-6f);
+        printf("\n  ┃ data_size         ┃ %10ld B   ┃",  wav_format.data_size);
+        printf("\n  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛");
     } else {
         f_close(&audio_file);
     }
@@ -149,7 +150,7 @@ audio_file_result wav_parse_headers() {
     
     // Read first 12 bytes
     if ( (fr = f_read(&audio_file, &file_header, 12, &br)) ) {
-        printf("(ERROR) open_sd_audio_file: Could not read file headers!\n");
+        printf("  (ERROR) wav_parse_headers: Could not read file headers!\n");
         printf("    "); print_error(fr, "fatFS says");
         return ERR_BAD_FILE_HEADER;
     }
@@ -159,8 +160,8 @@ audio_file_result wav_parse_headers() {
     file_header.file_size = to_little_endian(file_header.file_size);
 
     // Only do WAVE files
-    if (strcmp(file_header.ftype_header, "WAVE")) {
-        printf("(ERROR) open_sd_audio_file: Only .wav files supported.\n");
+    if (mini_strcmp(file_header.ftype_header, "WAVE") < 4) {
+        printf("  (ERROR) wav_parse_headers: Only .wav files supported.\n");
         return ERR_UNSUPPORTED_TYPE;
     }
     // Set file format to wave format struct
@@ -169,21 +170,21 @@ audio_file_result wav_parse_headers() {
     // Seek to end of fmt\0 block, we don't care about any other metadata.
     do {
         if (header_br > 100) {
-            printf("(ERROR) open_sd_audio_file: File header end marker not found!\n");
+            printf("  (ERROR) wav_parse_headers: File header end marker not found!\n");
             return ERR_BAD_FILE_HEADER;
         }
         if ( (fr = f_read(&audio_file, &temp_buf, 4, &br)) ) {
-            printf("(ERROR) open_sd_audio_file: Could not read file headers!\n");
+            printf("  (ERROR) wav_parse_headers: Could not read file headers!\n");
             printf("    "); print_error(fr, "fatFS says");
             return ERR_BAD_FILE_HEADER;
         }
         header_br += br;
-    } while (!strcmp(temp_buf, "fmt\0"));
+    } while (mini_strcmp(temp_buf, "fmt") < 3);
 
     // Read header size
     uint32_t header_size;
     if ( (fr = f_read(&audio_file, (char *)(&header_size), 4, &br)) ) {
-        printf("(ERROR) open_sd_audio_file: Could not read file headers!\n");
+        printf("  (ERROR) wav_parse_headers: Could not read file headers!\n");
         printf("    "); print_error(fr, "fatFS says");
         return ERR_BAD_FILE_HEADER;
     }
@@ -191,7 +192,7 @@ audio_file_result wav_parse_headers() {
     header_size = to_little_endian(header_size);
 
     if (header_size != header_br){
-        printf("(WARN) open_sd_audio_file: Specified file header size != Read file header size\n");
+        printf("  (WARN) wav_parse_headers: Specified file header size != Read file header size\n");
     }
     header_br += br;
 
@@ -199,7 +200,7 @@ audio_file_result wav_parse_headers() {
     uint32_t wav_header_offset = header_br;
 
     if ( (fr = f_read(&audio_file, &wav_format, 16, &br)) ) {
-        printf("(ERROR) open_sd_audio_file: Could not read WAV format header!\n");
+        printf("  (ERROR) wav_parse_headers: Could not read WAV format header!\n");
         printf("    "); print_error(fr, "fatFS says");
         return ERR_BAD_WAV_HEADER;
     }
@@ -215,23 +216,23 @@ audio_file_result wav_parse_headers() {
     
     // Enforce mono audio
     if (wav_format.num_channels != 1) {
-        printf("(ERROR) open_sd_audio_file: We only support MONO audio files right now!\n");
+        printf("  (ERROR) wav_parse_headers: We only support MONO audio files right now!\n");
         return ERR_UNSUPPORTED_TYPE;
     }
 
     // Look for "data" marker
     do {
         if (header_br - wav_header_offset > 100) {
-            printf("(ERROR) open_sd_audio_file: Data Start Marker not Found!\n");
+            printf("  (ERROR) wav_parse_headers: Data Start Marker not Found!\n");
             return ERR_BAD_WAV_HEADER;
         }
         if ( (fr = f_read(&audio_file, &temp_buf, 4, &br)) ) {
-            printf("(ERROR) open_sd_audio_file: Could not read WAV format header!\n");
+            printf("  (ERROR) wav_parse_headers: Could not read WAV format header!\n");
             printf("    "); print_error(fr, "fatFS says");
             return ERR_BAD_WAV_HEADER;
         }
         header_br += br;
-        if (!strcmp(temp_buf, "data\0")){
+        if (strcmp(temp_buf, "data") >= 4){
             break;
         }
         // Go in half-words.
@@ -241,7 +242,7 @@ audio_file_result wav_parse_headers() {
     
     // Store file data size
     if ( (fr = f_read(&audio_file, (char *)&(wav_format.data_size), 4, &br)) ) {
-        printf("(ERROR) open_sd_audio_file: Could not read WAV format header!\n");
+        printf("  (ERROR) wav_parse_headers: Could not read WAV format header!\n");
         printf("    "); print_error(fr, "fatFS says");
         return ERR_BAD_WAV_HEADER;
     }
@@ -357,9 +358,16 @@ audio_file_result add1_audio_buffer() {
 }
 #endif
 
+void              init_audio_buffer() {
+    fill_audio_buffer_s_to_f();
+    i_audio_buf_r = 0;
+}
+
 void              fill_audio_buffer_s_to_f() {
     audio_copying = true;
-    printf("     %5ld, ", i_audio_buf_r);
+    #ifdef AUDIO_PRINT_BUF_HEALTH
+        printf("     %5ld, ", i_audio_buf_r);
+    #endif
 
     // Here's your data, bb (˶˘ ³˘)♡
     #if AUDIO_COPY_LEN == 1024
@@ -442,8 +450,10 @@ void              fill_audio_buffer_s_to_f() {
     #endif
     #endif
 
-    uint32_t read_ptr_f = i_audio_buf_r;
-    printf("%5ld.\n", read_ptr_f);
+    #ifdef AUDIO_PRINT_BUF_HEALTH
+        uint32_t read_ptr_f = i_audio_buf_r;
+        printf("%5ld.\n", read_ptr_f);
+    #endif
     audio_copying = false;
 }
 
@@ -469,12 +479,26 @@ void              core1_maintain_audio_buff_routine() {
 void              step_audio_isr() {
     // isr to read next sample from audio_buffer
     pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);
-    
-    // uint16_t buff_readable = get_buff_readable();
-    // if (buff_readable <= 1) {
-    //     printf("(ERROR) step_audio_isr: Buff Empty.\n");
-    //     return;
-    // }
+
+    #ifdef DOUBLE_BUFFER
+        if (i_audio_buf_r == 0) {
+            int16_t * temp  = audio_buffer_wp;
+            audio_buffer_wp = audio_buffer_rp;
+            audio_buffer_rp = temp;
+
+            if (audio_copying) {
+                printf("(WARNING) step_audio_isr: Buffer overrun!\n");
+            } else {
+                audio_load_flag = true;
+            }
+        }
+    #else
+        uint16_t buff_readable = get_buff_readable();
+        if (buff_readable <= 1) {
+            printf("(ERROR) step_audio_isr: Buff Empty.\n");
+            return;
+        }
+    #endif
 
     int16_t samp    = (audio_buffer_rp[i_audio_buf_r]);               // Retrieve FIFO
     int16_t scaled  = (int16_t)round(samp * audio_pwm_scale);           // Scale between -top and top
@@ -487,23 +511,10 @@ void              step_audio_isr() {
 
     i_audio_buf_r = (i_audio_buf_r + 1) & (BUFF_MAX_I);
 
-    #ifdef DOUBLE_BUFFER
-    if (i_audio_buf_r == 0) {
-        int16_t * temp  = audio_buffer_wp;
-        audio_buffer_wp = audio_buffer_rp;
-        audio_buffer_rp = temp;
-
-        if (audio_copying) {
-            printf("(WARNING) step_audio_isr: Buffer overrun!\n");
-        }
-        audio_load_flag = true;
-    }
-    #endif
-
     #ifndef DOUBLE_BUFFER
-    if (i_audio_buf_r == LOAD_WHEN) {
-        audio_load_flag = true;
-    }
+        if (i_audio_buf_r == LOAD_WHEN) {
+            audio_load_flag = true;
+        }
     #endif
 }
 // */
@@ -541,6 +552,9 @@ void              step_audio_isr() {
 // */
 
 void              configure_audio_play() {
+    // Prevent conflict
+    stop_audio_playback();
+
     // Initialize DMA to copy from spi to pwm
     gpio_set_function(AUDIO_PWM_PIN_L, GPIO_FUNC_PWM);
     gpio_set_function(AUDIO_PWM_PIN_H, GPIO_FUNC_PWM);
@@ -573,15 +587,19 @@ void              configure_audio_play() {
         audio_pwm_top, audio_pwm_frq * 1e-3f
     );
 
+    if (audio_pwm_frq > 33e3) {
+        printf("    (WARNING) Sampling Frequencies above 32kHz are prone to buffer overruns!");
+    }
+
     // Init both channels to 0 duty
     pwm_set_both_levels(AUDIO_PWM_SLICE, 0, 0);
-    stop_audio_playback();
 }
 
 void              start_audio_playback() {
     gpio_set_function(AUDIO_PWM_PIN_L, GPIO_FUNC_PWM);
     gpio_set_function(AUDIO_PWM_PIN_H, GPIO_FUNC_PWM);
     pwm_set_enabled(AUDIO_PWM_SLICE, true);
+    pwm_set_irq_enabled(AUDIO_PWM_SLICE, true);
     audio_playing = true;
 }
 
@@ -591,5 +609,7 @@ void              stop_audio_playback() {
     gpio_put(AUDIO_PWM_PIN_L, 0);
     gpio_put(AUDIO_PWM_PIN_H, 0);
     pwm_set_enabled(AUDIO_PWM_SLICE, false);
+    pwm_set_irq_enabled(AUDIO_PWM_SLICE, false);
     audio_playing = false;
+    audio_load_flag = false;
 }

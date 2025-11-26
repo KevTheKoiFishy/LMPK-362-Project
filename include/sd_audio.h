@@ -82,6 +82,7 @@ uint16_t            get_buff_readable();
 uint16_t            get_buff_writeable();
 audio_file_result   fill_audio_buffer();
 audio_file_result   add1_audio_buffer();
+void                init_audio_buffer();
 void                fill_audio_buffer_s_to_f();
 void                core1_maintain_audio_buff_routine();
 
