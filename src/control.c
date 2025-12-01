@@ -68,6 +68,98 @@ void init_adc_dma() {
     adc_fifo_setup(1, 1, 0, 0, 0);
 }
 
+
+static float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
+}
+
+// Alarm volume ramp-up logic
+// Makes the ramp start gentle and increase faster near the end.
+static float volume_curve(float x) {
+    x = clamp01(x);
+    float k = 2.0f;      
+    return powf(x, k);    // y = x^k
+}
+
+static float clamp_pct(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 100.0f) return 100.0f;
+    return x;
+}
+
+static void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint32_t ramp_ms, uint32_t step_ms)
+{
+    if (step_ms == 0) step_ms = 50;
+    if (ramp_ms == 0) ramp_ms = 1;
+
+    start_pct = clamp_pct(start_pct);
+    end_pct   = clamp_pct(end_pct);
+
+    uint32_t steps = ramp_ms / step_ms;
+    if (steps == 0) steps = 1;
+
+    printf("Starting alarm volume ramp: %.1f%% -> %.1f%% (%u ms)\n", start_pct, end_pct, ramp_ms);
+
+    for (uint32_t i = 0; i <= steps; i++) {
+        float t = (float)i / (float)steps;   // 0 to 1
+        float curved = volume_curve(t);     
+        float current_pct = start_pct + (end_pct - start_pct) * curved;
+
+        set_volume_percent(current_pct);
+        sleep_ms(step_ms);
+    }
+
+    printf("Alarm volume ramp done.\n");
+}
+
+
+// Night mode logic
+typedef struct {
+    int   night_start_hour;     // military time (ex. 23 == 11 pm)
+    int   night_end_hour;        
+    float day_max_brightness;   // 0 to 100
+    float night_max_brightness;  
+} NightModeConfig;
+
+// Handles ranges that wrap midnight
+static bool is_night_time(int hour, const NightModeConfig *cfg) {
+    if (!cfg) return false;
+    if (hour < 0) hour = 0;
+    if (hour > 23) hour = 23;
+
+    int start = cfg->night_start_hour;
+    int end = cfg->night_end_hour;
+
+    if (start <= end) {
+        // Non-wrapping case like 20 to 23
+        return (hour >= start && hour < end);
+    } else {
+        // Wrapping case like 23 to 6
+        return (hour >= start || hour < end);
+    }
+}
+
+// returns the clamped brightness that was actually applied
+static float apply_night_mode_brightness(float knob_pct, int current_hour_24, const NightModeConfig *cfg) {
+    if (!cfg) return knob_pct;
+
+    knob_pct = clamp_pct(knob_pct);
+
+    float max_bri = is_night_time(current_hour_24, cfg) ? cfg->night_max_brightness : cfg->day_max_brightness;
+
+    max_bri = clamp_pct(max_bri);
+
+    if (knob_pct > max_bri) {
+        knob_pct = max_bri;
+    }
+
+    set_brightness_percent(knob_pct);  // send to “hardware”
+    return knob_pct;
+}
+
+
 //////////////////////////////////////////////////////////////////////////////
 
 void control_update (void)
