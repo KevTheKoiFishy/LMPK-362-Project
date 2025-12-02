@@ -1,18 +1,61 @@
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
+#include "control.h"
 #include "pico/stdlib.h"
 #include "hardware/timer.h"
 #include "hardware/irq.h"
 #include "hardware/adc.h"
 #include "hardware/dma.h"
-#include "display.h"
-
 
 uint32_t adc_fifo_out = 0;
 void display_init_pins();
 void display_init_timer();
 void display_char_print(const char* buffer);
 
+volatile knobMode knob_mode = BRIGHTNESS_MODE;
+volatile bool button_ever_pressed = false;
+volatile bool start_ramp = false;  
+
+static void init_buttons(void) {
+    gpio_set_dir(21, GPIO_IN); // button to control brightness
+    gpio_put(21, 0);
+    gpio_set_function(21, 5);
+
+    gpio_set_dir(26, GPIO_IN); // button to control volume
+    gpio_put(26, 0);
+    gpio_set_function(26, 5);
+}
+
+void gpio_isr() {    
+    if (gpio_get_irq_event_mask(21) & GPIO_IRQ_EDGE_RISE) {
+            gpio_acknowledge_irq(21, GPIO_IRQ_EDGE_RISE);
+            knob_mode = BRIGHTNESS_MODE;  
+            button_ever_pressed = true;          
+    }
+    if (gpio_get_irq_event_mask(26) & GPIO_IRQ_EDGE_RISE) {   
+            gpio_acknowledge_irq(26, GPIO_IRQ_EDGE_RISE);
+            if (knob_mode == VOLUME_MODE) {
+            start_ramp = true; 
+        } else {
+            knob_mode = VOLUME_MODE;
+        }
+        button_ever_pressed = true;
+    }
+}
+
+void init_gpio_irq() {
+    // add the handler for both pins at once, enable the GPIO IRQ for both pins and BANK0 IRQ interrupt.
+    uint32_t mask = (1u << 21) | (1u << 26);
+    gpio_add_raw_irq_handler_masked(mask, gpio_isr);
+
+    // configure GP21 and GP26 to a rising edge 
+    gpio_set_irq_enabled(21, GPIO_IRQ_EDGE_RISE, true);
+    gpio_set_irq_enabled(26, GPIO_IRQ_EDGE_RISE, true);
+
+    // enable the top-level GPIO Bank 0 IRQ line 
+    irq_set_enabled(IO_IRQ_BANK0, true);
+}
 
 void init_adc_freerun() {
     adc_init();
@@ -20,7 +63,6 @@ void init_adc_freerun() {
     adc_select_input(5);
     adc_read();
 
-    // adc_run();
     // start freerunning conversions on the ADC after enabling it.
     hw_set_bits(&adc_hw->cs, ADC_CS_START_MANY_BITS);
 }
@@ -68,15 +110,13 @@ void init_adc_dma() {
     adc_fifo_setup(1, 1, 0, 0, 0);
 }
 
-
+// Alarm volume ramp-up logic
 static float clamp01(float x) {
     if (x < 0.0f) return 0.0f;
     if (x > 1.0f) return 1.0f;
     return x;
 }
 
-// Alarm volume ramp-up logic
-// Makes the ramp start gentle and increase faster near the end.
 static float volume_curve(float x) {
     x = clamp01(x);
     float k = 2.0f;      
@@ -87,6 +127,13 @@ static float clamp_pct(float x) {
     if (x < 0.0f) return 0.0f;
     if (x > 100.0f) return 100.0f;
     return x;
+}
+
+
+void set_volume_percent(float pct) {
+    if (pct < 0.0f) pct = 0.0f;
+    if (pct > 100.0f) pct = 100.0f;
+    printf("[VOLUME] %.1f%%\n", pct);
 }
 
 static void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint32_t ramp_ms, uint32_t step_ms)
@@ -100,7 +147,7 @@ static void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint32_t 
     uint32_t steps = ramp_ms / step_ms;
     if (steps == 0) steps = 1;
 
-    printf("Starting alarm volume ramp: %.1f%% -> %.1f%% (%u ms)\n", start_pct, end_pct, ramp_ms);
+    printf("Starting alarm volume ramp: %.1f%% -> %.1f%% (%lu ms)\n", start_pct, end_pct, ramp_ms);
 
     for (uint32_t i = 0; i <= steps; i++) {
         float t = (float)i / (float)steps;   // 0 to 1
@@ -114,75 +161,51 @@ static void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint32_t 
     printf("Alarm volume ramp done.\n");
 }
 
-
-// Night mode logic
-typedef struct {
-    int   night_start_hour;     // military time (ex. 23 == 11 pm)
-    int   night_end_hour;        
-    float day_max_brightness;   // 0 to 100
-    float night_max_brightness;  
-} NightModeConfig;
-
-// Handles ranges that wrap midnight
-static bool is_night_time(int hour, const NightModeConfig *cfg) {
-    if (!cfg) return false;
-    if (hour < 0) hour = 0;
-    if (hour > 23) hour = 23;
-
-    int start = cfg->night_start_hour;
-    int end = cfg->night_end_hour;
-
-    if (start <= end) {
-        // Non-wrapping case like 20 to 23
-        return (hour >= start && hour < end);
-    } else {
-        // Wrapping case like 23 to 6
-        return (hour >= start || hour < end);
-    }
-}
-
-// returns the clamped brightness that was actually applied
-static float apply_night_mode_brightness(float knob_pct, int current_hour_24, const NightModeConfig *cfg) {
-    if (!cfg) return knob_pct;
-
-    knob_pct = clamp_pct(knob_pct);
-
-    float max_bri = is_night_time(current_hour_24, cfg) ? cfg->night_max_brightness : cfg->day_max_brightness;
-
-    max_bri = clamp_pct(max_bri);
-
-    if (knob_pct > max_bri) {
-        knob_pct = max_bri;
-    }
-
-    set_brightness_percent(knob_pct);  // send to “hardware”
-    return knob_pct;
-}
-
-
 //////////////////////////////////////////////////////////////////////////////
 
-void control_update (void)
-{
-    // Configures our microcontroller to 
-    // communicate over UART through the TX/RX pins
+void control_update (void) {   
     stdio_init_all();
+    sleep_ms(2000);   // important: give USB time so prints show
 
     display_init_pins();
     display_init_timer();
-
     init_adc_dma();
-    char buffer[10];
-    for(;;) {
-        float f = (adc_fifo_out * 3.3) / 4095.0;
-        snprintf(buffer, sizeof(buffer), "%1.7f", f);
-        display_char_print(buffer);
+    init_buttons();
+    init_gpio_irq();
 
-        printf("ADC Result: %s     \r", buffer);
+    bool ramp_done = false;   
+    
+    for (;;) {
+        // read the latest knob value from ADC
+        float v   = (adc_fifo_out * 3.3f) / 4095.0f;   // volts
+        float pct = (v / 3.3f) * 100.0f;               // 0–100%
+
+        // test ramp
+        if (start_ramp && !ramp_done) {
+            start_ramp = false;       // consume the request
+
+            float target_volume = pct;  // ramp up to current knob position
+
+            printf("\nStarting volume ramp to %.1f%%...\n", target_volume);
+            fflush(stdout);
+
+            // 7 seconds total, step every 100 ms
+            alarm_volume_ramp_blocking(0.0f, target_volume, 7000, 100);
+
+            printf("Ramp done.\n");
+            fflush(stdout);
+
+            //ramp_done = true;        // just once per run
+        }
+
+        //  knob level test per mode
+        if (knob_mode == BRIGHTNESS_MODE) {
+            printf("\rBrightness: %.1f %% (V = %.2f)   ", pct, v);
+        } else { // VOLUME_MODE
+            printf("\rVolume:     %.1f %% (V = %.2f)   ", pct, v);
+        }
+
         fflush(stdout);
-        
-        sleep_ms(250);
+        sleep_ms(100); 
     }
-
-    for(;;);
 }
