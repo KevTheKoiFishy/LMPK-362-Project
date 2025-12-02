@@ -13,6 +13,7 @@ static char msg[8] = {
     0x7D, // seven-segment value of 6
     0x07, // seven-segment value of 7
 };
+
 extern char font[]; // Font mapping for 7-segment display
 static int index = 0; // Current index in the message buffer
 
