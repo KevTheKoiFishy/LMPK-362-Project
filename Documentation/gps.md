@@ -26,7 +26,7 @@ $GNZDA,,,,,,*56
 $GPTXT,01,01,01,ANTENNA OK*35
 ```
 
-Sample push, few satellites in view, only time available
+Sample push, few satellites in view, only time available (85 seconds, Purdue Campus, Near West-Facing Window)
 ```
 $GNGGA,224452.000,,,,,0,00,25.5,,,,,,*7D
 $GNGLL,,,,,224452.000,V,M*60
@@ -42,7 +42,7 @@ $GNZDA,224452.000,,,,,*4F
 $GPTXT,01,01,01,ANTENNA OK*35
 ```
 
-Sample push, many satellites in view, date and time available
+Sample push, many satellites in view, date and time available (216 seconds, Purdue Campus, Near West-Facing Window)
 ```
 $GNGGA,062157.000,,,,,0,00,4.5,,,,,,*4E
 $GNGLL,,,,,062157.000,V,N*63

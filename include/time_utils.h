@@ -21,9 +21,9 @@ typedef struct {
 
 // Date structure
 typedef struct {
-    uint16_t year;      // e.g., 2025
-    uint8_t month;      // 1-12
     uint8_t day;        // 1-31
+    uint8_t month;      // 1-12
+    uint16_t year;      // e.g., 2025
 } my_date_t;
 
 // Alarm structure
@@ -49,8 +49,11 @@ typedef struct {
 my_time_t convert_timezone(my_time_t utc_time, int8_t offset_hours);
 time_12h_t convert_to_12h(my_time_t time_24h);
 bool is_leap_year(uint16_t year);
+uint8_t day_of_week(my_date_t date);
 uint8_t days_in_month(uint8_t month, uint16_t year);
 my_date_t increment_date(my_date_t current);
+my_date_t decrement_date(my_date_t current);
+int8_t daylight_savings_US(my_date_t standard_tz_date, my_time_t standard_tz_time);
 bool check_alarm(my_time_t current, my_alarm_t alarm);
 void stopwatch_to_display(my_stopwatch_t sw, uint8_t* minutes, uint8_t* seconds, uint8_t* centiseconds);
 bool timer_expired(my_timer_t* t);
