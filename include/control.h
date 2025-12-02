@@ -6,7 +6,6 @@ typedef enum {
     VOLUME_MODE     = 1
 } knobMode;
 
-
 void control_update(void);
 
 #endif
