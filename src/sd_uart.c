@@ -18,7 +18,7 @@ int         newline_seen        =  0;
 void init_uart() {
     gpio_set_function(0, UART_FUNCSEL_NUM(uart0, 0));
     gpio_set_function(1, UART_FUNCSEL_NUM(uart0, 1));
-    
+     
     // uart_reset(uart0);
     // uart_unreset(uart0);
 
