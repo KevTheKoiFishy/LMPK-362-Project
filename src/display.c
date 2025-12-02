@@ -26,8 +26,6 @@ void display_char_print(const char message[]) {
 
 /********************************************************* */
 // Implement the functions below.
-
-
 void display_init_pins() {
     // GP2-GP5 as inputs (for reading the rows). It should initialize the column pins to 0.
     uint32_t mask_2 = 1u << (2 & 0x1fu);
