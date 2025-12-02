@@ -9,11 +9,13 @@
 #include "sd_audio.h"
 #include "gps_uart.h"
 #include "gps_time.h"
+#include "ambience_control.h"
 
-#define TEST_SD_CMD
+// #define TEST_SD_CMD
 // #define TEST_SD_READ_RATE
 // #define TEST_SD_AUDIO_PLAYBACK
-// # define TEST_GPS_TIME
+// #define TEST_GPS_TIME
+#define TEST_VOLUME_UPDATE
 
 void core_1_main() {
     core1_loop:
@@ -24,17 +26,15 @@ void core_1_main() {
 int main() {
 
     // SETUP AND INTERRUPTS HERE
-    /**
-     * SD Card Initialization
-     * SD Card-Audio Initialization
-    */
+    printf("\nInitializing...");
 
     /////////////////
     // MULTICORE!  //
     /////////////////
     stdio_init_all(); // Enable multicore
     multicore_launch_core1(&core_1_main);
-
+    printf("\n[OK] Core 1 Main Launched");
+    
     /////////////////
     // SD CARD     //
     /////////////////
@@ -43,6 +43,7 @@ int main() {
     init_uart();
     init_uart_irq();
     init_sdcard_io();
+    printf("\n[OK] SDCard: IO Started");
     
     #ifdef TEST_SD_CMD
         sd_command_shell(); // uncomment for debug
@@ -52,6 +53,13 @@ int main() {
     // SD-AUDIO    //
     /////////////////
     mount(0, NULL);
+    printf("\n[OK] SDCard: Mounted Volume 0");
+
+    /////////////////
+    // AUDIO-VOL   //
+    /////////////////
+    init_volume_adc_and_dma();
+    printf("\n[OK] Volume: ADC, DMA Started");
     
     #ifdef TEST_SD_READ_RATE
         open_sd_audio_file(DEFAULT_AUDIO_PATH);
@@ -88,6 +96,10 @@ int main() {
             printf("\nGPS Time: "); printf(gps_get_timestr()); printf("\n\n");
         #endif
 
+        #ifdef TEST_VOLUME_UPDATE
+            sleep_ms(200);
+            printf("\nVolume | ADC: %4ld, Scalar: %.6f", get_volume_adc(), get_volume_scalar());
+        #endif
 
     goto core0_loop;
     

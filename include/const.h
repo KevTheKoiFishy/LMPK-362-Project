@@ -18,6 +18,10 @@
 /*** FORMAT                         ***/
 /*** FUNCTIONALITY - resources used ***/
 
+// TIME
+#define TIME_ZONE_OFFSET    -4
+#define DAYLIGHT_SAVINGS    false
+
 // ONBOARD - sio, unused
 #define ONBOARD_LEDS        {22, 23, 24, 25}
 #define ONBOARD_PUSHBUTTONS {21, 26}
@@ -35,11 +39,13 @@
 // GPS MODULE - uart1
 #define GPS_UART_PORT       uart1
 #define GPS_UART_IRQ        UART_IRQ_NUM(GPS_UART_PORT)
+#define GPS_UART_INT_PRI    5
 #define GPS_PIN_TX          24
 #define GPS_PIN_RX          25
 
 // VOLUME CONTROL - adc4
 #define VOL_ADC_PIN         44
+#define VOL_DMA_CH          0
 
 // DISPLAY (Maddie) - sio, spi1, pwm5a
 #define DISP_RST            27
