@@ -482,17 +482,19 @@ void              step_audio_isr() {
     pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);
 
     #ifdef DOUBLE_BUFFER
-        if (i_audio_buf_r == 0) {
+        if (i_audio_buf_r == 0) 
+            // Swap buffers
             int16_t * temp  = audio_buffer_wp;
             audio_buffer_wp = audio_buffer_rp;
             audio_buffer_rp = temp;
 
+            // Warn on buffer overflow
             if (audio_copying) {
                 printf("(WARNING) step_audio_isr: Buffer overrun!\n");
             } else {
                 audio_load_flag = true;
             }
-        }
+        
     #else
         uint16_t buff_readable = get_buff_readable();
         if (buff_readable <= 1) {
@@ -501,9 +503,11 @@ void              step_audio_isr() {
         }
     #endif
 
-    audio_vol       = get_volume_scalar() * (get_volume_adc() * 0.0002442002442f);  // Divide adc output by 4095.0 and multiply by volume scalar, ie. for ramping.
-    int16_t samp    = (audio_buffer_rp[i_audio_buf_r]);                     // Retrieve FIFO
-    int16_t scaled  = (int16_t)round(samp * audio_pwm_scale * audio_vol);   // Scale between -top and top
+    uint16_t dial       = get_volume_adc();
+    float    dial_sq    = ((uint32_t)dial * dial) * 5.96337592674589e-8;        // Multiply by squared ratio of volume dial
+    float    audio_vol  = get_volume_scalar() * dial_sq;                        // Multiply by additional scalar, ie. ramping
+    int16_t  samp       = (audio_buffer_rp[i_audio_buf_r]);                     // Retrieve FIFO
+    int16_t  scaled     = (int16_t)round(samp * audio_pwm_scale * audio_vol);   // Scale between -top and top
 
     if (scaled > 0) {
         *cc_reg     = scaled;
@@ -565,7 +569,7 @@ void              configure_audio_play() {
     pwm_set_irq_enabled(AUDIO_PWM_SLICE, true);
     irq_set_exclusive_handler(AUDIO_PWM_INT_NUM, &step_audio_isr);
     irq_set_enabled(AUDIO_PWM_INT_NUM, true);
-    irq_set_priority(AUDIO_PWM_INT_NUM, 0);
+    irq_set_priority(AUDIO_PWM_INT_NUM, AUDIO_PWM_INT_PRI);
 
     // Set PWM Freq and Top
 

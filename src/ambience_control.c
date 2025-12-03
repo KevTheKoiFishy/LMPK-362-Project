@@ -1,8 +1,19 @@
 #include "const.h"
 #include "ambience_control.h"
 
-uint32_t volume_adc_out = 4095;
-float    volume_scalar  = 1.0;
+uint16_t volume_adc_out     = 4095;
+float    volume_scalar      = 1.0f;
+
+uint16_t volume_ramp_delT   = -1;
+float    volume_ramp_r      = -1.0f;
+float    volume_ramp_delR   = -1.0f;
+float    volume_ramp_a0     = -1.0f;
+float    volume_ramp_af     = -1.0f;
+bool     volume_ramp_en     = false;
+
+uint16_t get_volume_adc()       { return volume_adc_out; }
+float    get_volume_scalar()    { return volume_scalar;  }
+bool     get_volume_ramp_en()   { return volume_ramp_en; }
 
 //// GET ADC CONVERSIONS ////
 
@@ -31,7 +42,7 @@ void init_volume_dma() {
     volume_dma_ch -> ctrl_trig = 0;
 
     // Create a uint32_t variable called temp
-    u_int32_t temp = 0;
+    uint32_t temp = 0;
 
     // OR in the following:
     // left-shift the value 1 by the correct number of bits 
@@ -65,19 +76,16 @@ void init_volume_adc_and_dma() {
 
 //// VOLUME MODULATION ////
 
-uint32_t get_volume_adc() { return volume_adc_out; }    // For debugging
-float get_volume_scalar() { return volume_scalar; }     // For debugging
-
 // Clamp between [0, 1]
 static float clamp01(float x) {
-    if (x < 0.0f) return 0.0f;
-    if (x > 1.0f) return 1.0f;
+    if (x < 0.0f)   return 0.0f;
+    if (x > 1.0f)   return 1.0f;
     return x;
 }
 
 // Clamp between [0, 100]
 static float clamp_pct(float x) {
-    if (x < 0.0f) return 0.0f;
+    if (x < 0.0f)   return 0.0f;
     if (x > 100.0f) return 100.0f;
     return x;
 }
@@ -85,25 +93,25 @@ static float clamp_pct(float x) {
 // Alarm volume ramp-up fxn: Makes the ramp start gentle and increase faster near the end.
 static float volume_curve(float x) {
     x = clamp01(x);
-    float k = 2.0f;      
+    float k = VOLUME_RAMP_POW_CURVE_EXP;
     return powf(x, k);    // y = x^k
 }
 
 // Execute volume_curve function. Ramps volume between start pct and end pct of the dial setting.
-void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint32_t ramp_ms, uint32_t step_ms)
+void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint16_t ramp_ms, uint16_t step_ms)
 {
-    if (step_ms == 0) step_ms = 50;
-    if (ramp_ms == 0) ramp_ms = 1;
+    if (step_ms <= 0) step_ms = VOLUME_RAMP_DEFAULT_STEP_MS;
+    if (ramp_ms <= 0) ramp_ms = VOLUME_RAMP_DEFAULT_RAMP_MS;
 
     start_pct = clamp_pct(start_pct);
     end_pct   = clamp_pct(end_pct);
 
-    uint32_t steps = ramp_ms / step_ms;
+    uint16_t steps = ramp_ms / step_ms;
     if (steps == 0) steps = 1;
 
     printf("Starting alarm volume ramp: %.1f%% -> %.1f%% (%ld ms)\n", start_pct, end_pct, ramp_ms);
 
-    for (uint32_t i = 0; i <= steps; i++) {
+    for (uint16_t i = 0; i <= steps; i++) {
         float t = (float)i / (float)steps;   // 0 to 1
         float curved = volume_curve(t);     
         float current_pct = start_pct + (end_pct - start_pct) * curved;
@@ -114,6 +122,56 @@ void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint32_t ramp_ms
     }
 
     printf("Alarm volume ramp done.\n");
+}
+
+void volume_ramp_isr() {
+    // Ack
+    VOL_RAMP_TIMER_HW -> intr |= 1 << VOL_RAMP_TIM_ALARM;
+
+    // Set volume via curve
+    volume_scalar = volume_ramp_a0 + (volume_ramp_af - volume_ramp_a0) * volume_curve(volume_ramp_r);
+
+    // Update ramp progress
+    volume_ramp_r += volume_ramp_delR;
+    if (volume_ramp_r > 1) { disable_volume_ramp_int(); return; }
+    
+    // Set next isr time.
+    // !!! ENSURE ALARMS ARE SET RELATIVE TO BASE OR PREVIOUS TIME, NOT TIMERAWL AT TIME OF RUN.
+    VOL_RAMP_TIMER_HW -> alarm[VOL_RAMP_TIM_ALARM] += volume_ramp_delT * 1000;
+}
+
+void configure_volume_ramp_int(float start_ratio, float end_ratio, uint16_t ramp_ms, uint16_t step_ms) {
+    // Nope!
+    if (step_ms <= 0) step_ms = VOLUME_RAMP_DEFAULT_STEP_MS;
+    if (ramp_ms <= 0) ramp_ms = VOLUME_RAMP_DEFAULT_RAMP_MS;
+
+    volume_ramp_a0      = clamp_01(start_ratio);
+    volume_ramp_af      = clamp_01(end_ratio);
+
+    // Track progress and isr fire times
+    volume_ramp_delT    = step_ms;
+    volume_ramp_r       = 0.f;
+    volume_ramp_delR    = (float)step_ms / ramp_ms;
+    
+    // Set up isr
+    irq_set_exclusive_handler(VOL_RAMP_INT_NUM, &volume_ramp_isr);
+    irq_set_priority(VOL_RAMP_INT_NUM, VOL_RAMP_INT_PRI);
+}
+
+void enable_volume_ramp_int() {
+    // Set up initial trigger time
+    VOL_RAMP_TIMER_HW -> alarm[VOL_RAMP_TIM_ALARM] = VOL_RAMP_TIMER_HW -> timerawl + volume_ramp_delT * 1000;
+    printf("Starting alarm volume ramp: %.1f%% -> %.1f%% by %ld ms\n", volume_ramp_a0*100.f, volume_ramp_af*100.f, volume_ramp_delT);
+
+    // Enable interrupt
+    VOL_RAMP_TIMER_HW -> inte |= (1 << VOL_RAMP_TIM_ALARM);
+    irq_set_enabled(VOL_RAMP_INT_NUM, true);
+}
+
+void disable_volume_ramp_int() {
+    // Disable Interrupt
+    VOL_RAMP_TIMER_HW -> inte &= ~(1 << VOL_RAMP_TIM_ALARM);
+    irq_set_enabled(VOL_RAMP_INT_NUM, false);
 }
 
 //// DISPLAY NIGHT MODE ////

@@ -8,6 +8,7 @@
 // Put all other define statements in your specific header files!
 
 #include <hardware/spi.h>
+#include <hardware/timer.h>
 
 // MACROS
 #define GET_CORE_NUM()      *(uint32_t *) (SIO_BASE + SIO_CPUID_OFFSET)
@@ -20,7 +21,7 @@
 
 // TIME
 #define TIME_ZONE_OFFSET    -4
-#define DAYLIGHT_SAVINGS    false
+#define DAYLIGHT_SAVINGS_EN false
 
 // ONBOARD - sio, unused
 #define ONBOARD_LEDS        {22, 23, 24, 25}
@@ -39,11 +40,15 @@
 // GPS MODULE - uart1
 #define GPS_UART_PORT       uart1
 #define GPS_UART_IRQ        UART_IRQ_NUM(GPS_UART_PORT)
-#define GPS_UART_INT_PRI    5
+#define GPS_UART_INT_PRI    2
 #define GPS_PIN_TX          24
 #define GPS_PIN_RX          25
 
 // VOLUME CONTROL - adc4
+#define VOL_RAMP_TIMER_HW   timer0_hw
+#define VOL_RAMP_TIM_ALARM  1
+#define VOL_RAMP_INT_NUM    TIMER0_IRQ_1
+#define VOL_RAMP_INT_PRI    1
 #define VOL_ADC_PIN         45
 #define VOL_DMA_CH          0
 
@@ -68,6 +73,7 @@
 // PWM AUDIO PLAYBACK - pwm10ab, pwm_irq_wrap_1
 #define BASE_CLK            150000000u
 #define AUDIO_PWM_INT_NUM   PWM_IRQ_WRAP_0
+#define AUDIO_PWM_INT_PRI   0
 #define AUDIO_PWM_SLICE     11
 #define AUDIO_PWM_PIN_L     38
 #define AUDIO_PWM_PIN_H     39

@@ -4,11 +4,12 @@
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
 
+#include "const.h"
 #include "sd.h"
 #include "sd_ff.h"     /* Obtains integer types */
 #include "sd_diskio.h" /* Declarations of disk functions */
 
-spi_inst_t *sd = spi0; // the SPI interface to use for the SD card
+spi_inst_t *sd = SD_SPI_PORT; // the SPI interface to use for the SD card
 
 // Weak definitions for the functions that must be implemented elsewhere
 // to allow the SPI interface for the SD card to work.
