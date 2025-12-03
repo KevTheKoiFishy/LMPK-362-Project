@@ -32,7 +32,7 @@ void init_spi_sdcard() {
 void disable_sdcard() {
     // Send filler bytes
     uint16_t filler[1] = {0xFFFF};
-    spi_write16_blocking(spi0, filler, 1);
+    spi_write16_blocking(SD_SPI_PORT, filler, 1);
 
     // force mosi high
     gpio_set_function(SD_PIN_MOSI, GPIO_FUNC_SIO);

@@ -16,6 +16,7 @@
 #include "sd_sdcard.h"
 #include "sd_diskio.h"
 #include "sd_audio.h"
+#include "ambience_control.h"
 
 // INITIALIZE GLOBS  //
 
@@ -47,7 +48,7 @@ volatile uint32_t   i_audio_buf_w   = 0;
          uint16_t   audio_pwm_top   = -1;       // Actual top value
             float   audio_pwm_frq   = -1.0;     // Actual frequency
             float   audio_pwm_scale = -1.0;     // Actual top / bit depth top
-            float   audio_base_vol  =  1.0;     // Actual top / bit depth top
+            float   audio_vol       =  1.0;     // Actual top / bit depth top
 volatile uint32_t * cc_reg          = &(pwm_hw -> slice[AUDIO_PWM_SLICE].cc);
 
 // So that core1 routine knows if they should update buffer.
@@ -481,17 +482,19 @@ void              step_audio_isr() {
     pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);
 
     #ifdef DOUBLE_BUFFER
-        if (i_audio_buf_r == 0) {
+        if (i_audio_buf_r == 0) 
+            // Swap buffers
             int16_t * temp  = audio_buffer_wp;
             audio_buffer_wp = audio_buffer_rp;
             audio_buffer_rp = temp;
 
+            // Warn on buffer overflow
             if (audio_copying) {
                 printf("(WARNING) step_audio_isr: Buffer overrun!\n");
             } else {
                 audio_load_flag = true;
             }
-        }
+        
     #else
         uint16_t buff_readable = get_buff_readable();
         if (buff_readable <= 1) {
@@ -500,8 +503,11 @@ void              step_audio_isr() {
         }
     #endif
 
-    int16_t samp    = (audio_buffer_rp[i_audio_buf_r]);               // Retrieve FIFO
-    int16_t scaled  = (int16_t)round(samp * audio_pwm_scale);           // Scale between -top and top
+    uint16_t dial       = get_volume_adc();
+    float    dial_sq    = ((uint32_t)dial * dial) * 5.96337592674589e-8;        // Multiply by squared ratio of volume dial
+    float    audio_vol  = get_volume_scalar() * dial_sq;                        // Multiply by additional scalar, ie. ramping
+    int16_t  samp       = (audio_buffer_rp[i_audio_buf_r]);                     // Retrieve FIFO
+    int16_t  scaled     = (int16_t)round(samp * audio_pwm_scale * audio_vol);   // Scale between -top and top
 
     if (scaled > 0) {
         *cc_reg     = scaled;
@@ -563,7 +569,7 @@ void              configure_audio_play() {
     pwm_set_irq_enabled(AUDIO_PWM_SLICE, true);
     irq_set_exclusive_handler(AUDIO_PWM_INT_NUM, &step_audio_isr);
     irq_set_enabled(AUDIO_PWM_INT_NUM, true);
-    irq_set_priority(AUDIO_PWM_INT_NUM, 0);
+    irq_set_priority(AUDIO_PWM_INT_NUM, AUDIO_PWM_INT_PRI);
 
     // Set PWM Freq and Top
 
@@ -578,8 +584,7 @@ void              configure_audio_play() {
     pwm_set_wrap(AUDIO_PWM_SLICE, audio_pwm_top - 1);                                   // MY TOP var is the 100% duty cc value, the hardware TOP is this minus 1.
 
     audio_pwm_frq  = PWM_GET_FRQ(audio_pwm_psc, audio_pwm_top);                         // Used freq (will differ slightly from wav_format.bits_per_samp)
-    audio_pwm_scale = audio_base_vol *
-        (float)(audio_pwm_top << 1) / (1 << wav_format.bits_per_samp);                  // Scale between -audio_pwm_top and +audio_pwm_top
+    audio_pwm_scale = (float)(audio_pwm_top << 1) / (1 << wav_format.bits_per_samp);    // Scale between -audio_pwm_top and +audio_pwm_top
     
     printf("\n\n  configure_audio_play: wants to note Bit Depth and Sampling Rate Changes:\n    File requested top = %d at freq = %.3f kHz,\n    However, best top achieveable = %.3f using psc. of %.2f -> %.2f MHz PWM clk,\n    Using top %d with sample rate = %.3f kHz!\n",
         1 << wav_format.bits_per_samp, wav_format.sample_rate * 1e-3f,

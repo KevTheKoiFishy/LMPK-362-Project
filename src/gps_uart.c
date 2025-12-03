@@ -33,8 +33,10 @@ void init_gps_uart() {
 
     uart_set_fifo_enabled(GPS_UART_PORT, false);
     uart_set_irqs_enabled(GPS_UART_PORT, true, false);
+
     irq_set_exclusive_handler(GPS_UART_IRQ, gps_uart_rx_handler);
     irq_set_enabled(GPS_UART_IRQ, true);
+    irq_set_priority(GPS_UART_IRQ, GPS_UART_INT_PRI)
 }
 
 // Read from GPS and pipe to terminal
