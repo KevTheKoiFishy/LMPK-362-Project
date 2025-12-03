@@ -1,7 +1,7 @@
 // Constants and macros to make our lives easier!
 
 // In order to prevent pin and hardware peripheral conflicts
-// betwee different parts of the project, state your pin choices
+// between different parts of the project, state your pin choices
 // and spi/pwm/adc channels here.
 
 // For brevity, only put stuff that you're "claiming" for your functions.
@@ -52,16 +52,16 @@
 #define VOL_ADC_PIN         45
 #define VOL_DMA_CH          0
 
-// DISPLAY (Maddie) - sio, spi1, pwm5a
-#define DISP_RST            27
-#define DISP_DCRS           28
+// DISPLAY (Maddie) - sio, spi1
+#define TFT_SPI             spi1
+#define TFT_PIN_SCK         10
 
-#define DISP_SPI_PORT       spi1
-#define DISP_PIN_CSn        29
-#define DISP_PIN_SCK        30
-#define DISP_PIN_TX         31
+#define TFT_PIN_MOSI        15 
+#define TFT_PIN_CS          13 
+#define TFT_PIN_DC          14 
+#define TFT_PIN_RST         16 
 
-#define DISP_BACKLIT_PWM    26
+#define TFT_BACKLIT_PWM    26
 
 // SD CARD - spi0
 #define SD_SPI_PORT         spi0

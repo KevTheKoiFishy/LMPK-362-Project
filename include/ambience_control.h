@@ -11,6 +11,12 @@
 #include "hardware/adc.h"
 #include "hardware/dma.h"
 
+// Knob Controls what?
+typedef enum {
+    BRIGHTNESS_MODE = 0,
+    VOLUME_MODE     = 1
+} knobMode;
+
 // Ramping
 #define VOLUME_RAMP_DEFAULT_STEP_MS 50
 #define VOLUME_RAMP_DEFAULT_RAMP_MS 1000
@@ -43,5 +49,7 @@ void disable_volume_ramp_int();
 float apply_night_mode_brightness(float knob_pct, int current_hour_24, const NightModeConfig *cfg);
 
 __weak void set_brightness_percent(float b) { float brightness_pct = b; }
+
+void control_update(void);
 
 #endif

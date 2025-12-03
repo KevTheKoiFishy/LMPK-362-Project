@@ -1,6 +1,7 @@
 #include "const.h"
 #include "ambience_control.h"
 
+//// VOLUME & VOLUME RAMP ////
 uint16_t volume_adc_out     = 4095;
 float    volume_scalar      = 1.0f;
 
@@ -14,6 +15,54 @@ bool     volume_ramp_en     = false;
 uint16_t get_volume_adc()       { return volume_adc_out; }
 float    get_volume_scalar()    { return volume_scalar;  }
 bool     get_volume_ramp_en()   { return volume_ramp_en; }
+
+//// GPIO ////
+
+volatile knobMode knob_mode = BRIGHTNESS_MODE;
+volatile bool button_ever_pressed = false;
+volatile bool start_ramp = false;  
+
+//// GPIO ////
+
+static void init_buttons(void) {
+    gpio_set_dir(21, GPIO_IN); // button to control brightness
+    gpio_put(21, 0);
+    gpio_set_function(21, 5);
+
+    gpio_set_dir(26, GPIO_IN); // button to control volume
+    gpio_put(26, 0);
+    gpio_set_function(26, 5);
+}
+
+void gpio_isr() {    
+    if (gpio_get_irq_event_mask(21) & GPIO_IRQ_EDGE_RISE) {
+            gpio_acknowledge_irq(21, GPIO_IRQ_EDGE_RISE);
+            knob_mode = BRIGHTNESS_MODE;  
+            button_ever_pressed = true;          
+    }
+    if (gpio_get_irq_event_mask(26) & GPIO_IRQ_EDGE_RISE) {   
+            gpio_acknowledge_irq(26, GPIO_IRQ_EDGE_RISE);
+            if (knob_mode == VOLUME_MODE) {
+            start_ramp = true; 
+        } else {
+            knob_mode = VOLUME_MODE;
+        }
+        button_ever_pressed = true;
+    }
+}
+
+void init_gpio_irq() {
+    // add the handler for both pins at once, enable the GPIO IRQ for both pins and BANK0 IRQ interrupt.
+    uint32_t mask = (1u << 21) | (1u << 26);
+    gpio_add_raw_irq_handler_masked(mask, gpio_isr);
+
+    // configure GP21 and GP26 to a rising edge 
+    gpio_set_irq_enabled(21, GPIO_IRQ_EDGE_RISE, true);
+    gpio_set_irq_enabled(26, GPIO_IRQ_EDGE_RISE, true);
+
+    // enable the top-level GPIO Bank 0 IRQ line 
+    irq_set_enabled(IO_IRQ_BANK0, true);
+}
 
 //// GET ADC CONVERSIONS ////
 
@@ -211,3 +260,52 @@ float apply_night_mode_brightness(float knob_pct, int current_hour_24, const Nig
     set_brightness_percent(knob_pct);  // send to “hardware”
     return knob_pct;
 }
+
+//////////////////////////////////////////////////////////////////////////////
+/*
+void control_update (void) {   
+    stdio_init_all();
+    sleep_ms(2000);   // important: give USB time so prints show
+
+    display_init_pins();
+    display_init_timer();
+    init_adc_dma();
+    init_buttons();
+    init_gpio_irq();
+
+    bool ramp_done = false;   
+    
+    for (;;) {
+        // read the latest knob value from ADC
+        float v   = (adc_fifo_out * 3.3f) / 4095.0f;   // volts
+        float pct = (v / 3.3f) * 100.0f;               // 0–100%
+
+        // test ramp
+        if (start_ramp && !ramp_done) {
+            start_ramp = false;       // consume the request
+
+            float target_volume = pct;  // ramp up to current knob position
+
+            printf("\nStarting volume ramp to %.1f%%...\n", target_volume);
+            fflush(stdout);
+
+            // 7 seconds total, step every 100 ms
+            alarm_volume_ramp_blocking(0.0f, target_volume, 7000, 100);
+
+            printf("Ramp done.\n");
+            fflush(stdout);
+
+            //ramp_done = true;        // just once per run
+        }
+
+        //  knob level test per mode
+        if (knob_mode == BRIGHTNESS_MODE) {
+            printf("\rBrightness: %.1f %% (V = %.2f)   ", pct, v);
+        } else { // VOLUME_MODE
+            printf("\rVolume:     %.1f %% (V = %.2f)   ", pct, v);
+        }
+
+        fflush(stdout);
+        sleep_ms(100); 
+    }
+}*/
