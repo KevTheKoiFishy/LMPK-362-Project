@@ -9,6 +9,7 @@
 #include "hardware/timer.h"
 #include "hardware/irq.h"
 #include "hardware/adc.h"
+#include "hardware/pwm.h"
 #include "hardware/dma.h"
 
 // Knob Controls what?
@@ -19,7 +20,7 @@ typedef enum {
 
 // Ramping
 #define VOLUME_RAMP_DEFAULT_STEP_MS 50
-#define VOLUME_RAMP_DEFAULT_RAMP_MS 1000
+#define VOLUME_RAMP_DEFAULT_RAMP_MS 7000
 #define VOLUME_RAMP_POW_CURVE_EXP   2.0f
 
 // Night mode logic

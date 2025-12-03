@@ -40,19 +40,19 @@
 // GPS MODULE - uart1
 #define GPS_UART_PORT       uart1
 #define GPS_UART_IRQ        UART_IRQ_NUM(GPS_UART_PORT)
-#define GPS_UART_INT_PRI    2
+#define GPS_UART_INT_PRI    1
 #define GPS_PIN_TX          24
 #define GPS_PIN_RX          25
 
 // VOLUME CONTROL - adc4
 #define VOL_RAMP_TIMER_HW   timer0_hw
-#define VOL_RAMP_TIM_ALARM  1
 #define VOL_RAMP_INT_NUM    TIMER0_IRQ_1
-#define VOL_RAMP_INT_PRI    1
+#define VOL_RAMP_TIM_ALARM  1
+#define VOL_RAMP_INT_PRI    2
 #define VOL_ADC_PIN         45
 #define VOL_DMA_CH          0
 
-// DISPLAY (Maddie) - sio, spi1
+// DISPLAY (Maddie) - sio, spi1, pwm5ab
 #define TFT_SPI             spi1
 #define TFT_PIN_SCK         10
 
@@ -61,7 +61,11 @@
 #define TFT_PIN_DC          14 
 #define TFT_PIN_RST         16 
 
-#define TFT_BACKLIT_PWM    26
+#define TFT_BACKLIT_INT_NUM PWM_IRQ_WRAP_1
+#define TFT_BACKLIT_INT_PRI 2
+#define TFT_BACKLIT_SLICE   5
+#define TFT_BACKLIT_PIN     26
+#define TFT_BACKLIT_CH      (TFT_BACKLIT_PIN & 1)
 
 // SD CARD - spi0
 #define SD_SPI_PORT         spi0

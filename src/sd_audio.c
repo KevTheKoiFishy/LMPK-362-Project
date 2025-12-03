@@ -573,11 +573,11 @@ void              configure_audio_play() {
 
     // Set PWM Freq and Top
 
-    audio_pwm_psc = PWM_CLK_PSC(wav_format.sample_rate, wav_format.bits_per_samp);      // Estimate psc...
-    audio_pwm_psc = CLIP(audio_pwm_psc, 1.f, 256.f);
+    audio_pwm_psc  = PWM_CLK_PSC(wav_format.sample_rate, wav_format.bits_per_samp);      // Estimate psc...
+    audio_pwm_psc  = CLIP(audio_pwm_psc, 1.f, 256.f);
     pwm_set_clkdiv(AUDIO_PWM_SLICE, audio_pwm_psc);
         uint32_t real_div_reg = pwm_hw -> slice[AUDIO_PWM_SLICE].div;
-    audio_pwm_psc = FIXED_8p4_TO_FLOAT(real_div_reg);                                   // Then get true value
+    audio_pwm_psc  = FIXED_8p4_TO_FLOAT(real_div_reg);                                   // Then get true value
 
     float best_top = PWM_EST_TOP(wav_format.sample_rate, audio_pwm_psc);                // Get theoretical top
     audio_pwm_top  = (uint16_t)roundf(best_top);                                        // Used top value
@@ -605,6 +605,11 @@ void              start_audio_playback() {
     gpio_set_function(AUDIO_PWM_PIN_H, GPIO_FUNC_PWM);
     pwm_set_enabled(AUDIO_PWM_SLICE, true);
     pwm_set_irq_enabled(AUDIO_PWM_SLICE, true);
+
+    if (get_volume_ramp_en()) {
+        configure_volume_ramp_int(0.0f, 1.0f, VOLUME_RAMP_DEFAULT_RAMP_MS, VOLUME_RAMP_DEFAULT_STEP_MS); // Use default values
+        enable_volume_ramp_int();
+    }
     audio_playing = true;
 }
 

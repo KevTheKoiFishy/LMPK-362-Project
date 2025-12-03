@@ -2,6 +2,8 @@
 #include "ambience_control.h"
 
 //// VOLUME & VOLUME RAMP ////
+dma_channel_hw_t * volume_dma_ch = &dma_hw -> ch[VOL_DMA_CH]; // Will use for BOTH volume and Brightness!
+
 uint16_t volume_adc_out     = 4095;
 float    volume_scalar      = 1.0f;
 
@@ -16,11 +18,17 @@ uint16_t get_volume_adc()       { return volume_adc_out; }
 float    get_volume_scalar()    { return volume_scalar;  }
 bool     get_volume_ramp_en()   { return volume_ramp_en; }
 
-//// GPIO ////
+//// BRIGHTNESS ////
+float    brightness_curr_val     = 4095.0f;
+uint16_t brightness_set_adc_out  = 2048;
+uint16_t brightness_env_adc_out  = 0;
+bool     brightness_adapt_en     = false;
 
+uint16_t get_brightness_set()   { return brightness_set_adc_out; }
+
+//// GPIO ////
 volatile knobMode knob_mode = BRIGHTNESS_MODE;
-volatile bool button_ever_pressed = false;
-volatile bool start_ramp = false;  
+// volatile bool button_ever_pressed = false;
 
 //// GPIO ////
 
@@ -36,18 +44,33 @@ static void init_buttons(void) {
 
 void gpio_isr() {    
     if (gpio_get_irq_event_mask(21) & GPIO_IRQ_EDGE_RISE) {
-            gpio_acknowledge_irq(21, GPIO_IRQ_EDGE_RISE);
-            knob_mode = BRIGHTNESS_MODE;  
-            button_ever_pressed = true;          
+        gpio_acknowledge_irq(21, GPIO_IRQ_EDGE_RISE);
+
+        // Toggle Adaptive Brightness
+        if (knob_mode == BRIGHTNESS_MODE) {
+            brightness_adapt_en = !brightness_adapt_en;
+        }
+        // Set knob to control brightness
+        else {
+            knob_mode = BRIGHTNESS_MODE;
+        }
+
+        volume_dma_ch -> write_addr = (uint32_t) &brightness_set_adc_out;
+        // button_ever_pressed = true;
     }
     if (gpio_get_irq_event_mask(26) & GPIO_IRQ_EDGE_RISE) {   
-            gpio_acknowledge_irq(26, GPIO_IRQ_EDGE_RISE);
-            if (knob_mode == VOLUME_MODE) {
-            start_ramp = true; 
-        } else {
-            knob_mode = VOLUME_MODE;
+        gpio_acknowledge_irq(26, GPIO_IRQ_EDGE_RISE);
+
+        // Toggle volume ramping
+        if (knob_mode == VOLUME_MODE) {
+            volume_ramp_en = !volume_ramp_en;
         }
-        button_ever_pressed = true;
+        // Switch to volume mode
+        else {
+            knob_mode = VOLUME_MODE;
+            volume_dma_ch -> write_addr = (uint32_t) &volume_adc_out;
+        }
+        // button_ever_pressed = true;
     }
 }
 
@@ -78,7 +101,6 @@ void init_volume_adc_freerun() {
 
 // Initialize volume DMA Channel
 void init_volume_dma() {
-    dma_channel_hw_t * volume_dma_ch = &dma_hw -> ch[VOL_DMA_CH];
 
     // Configure DMA Channel 0 to read from the ADC FIFO and write to the variable "volume". 
     volume_dma_ch -> read_addr  = (uint32_t) &adc_hw->fifo;
@@ -123,7 +145,7 @@ void init_volume_adc_and_dma() {
     adc_fifo_setup(1, 1, 0, 0, 0);
 }
 
-//// VOLUME MODULATION ////
+//// VOLUME MODULATION -- HELPERS ////
 
 // Clamp between [0, 1]
 static float clamp01(float x) {
@@ -145,6 +167,8 @@ static float volume_curve(float x) {
     float k = VOLUME_RAMP_POW_CURVE_EXP;
     return powf(x, k);    // y = x^k
 }
+
+//// VOLUME MODULATION -- BLOCKING ////
 
 // Execute volume_curve function. Ramps volume between start pct and end pct of the dial setting.
 void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint16_t ramp_ms, uint16_t step_ms)
@@ -173,6 +197,9 @@ void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint16_t ramp_ms
     printf("Alarm volume ramp done.\n");
 }
 
+//// VOLUME MODULATION -- SCHEDULED ////
+
+// Update volume_scalar by ramping rules.
 void volume_ramp_isr() {
     // Ack
     VOL_RAMP_TIMER_HW -> intr |= 1 << VOL_RAMP_TIM_ALARM;
@@ -189,6 +216,7 @@ void volume_ramp_isr() {
     VOL_RAMP_TIMER_HW -> alarm[VOL_RAMP_TIM_ALARM] += volume_ramp_delT * 1000;
 }
 
+// Initialize ramp rules.
 void configure_volume_ramp_int(float start_ratio, float end_ratio, uint16_t ramp_ms, uint16_t step_ms) {
     // Nope!
     if (step_ms <= 0) step_ms = VOLUME_RAMP_DEFAULT_STEP_MS;
@@ -207,6 +235,7 @@ void configure_volume_ramp_int(float start_ratio, float end_ratio, uint16_t ramp
     irq_set_priority(VOL_RAMP_INT_NUM, VOL_RAMP_INT_PRI);
 }
 
+// Start volume ramp - start_audio_playback will be responsible for triggering when get_volume_ramp_en() is true;
 void enable_volume_ramp_int() {
     // Set up initial trigger time
     VOL_RAMP_TIMER_HW -> alarm[VOL_RAMP_TIM_ALARM] = VOL_RAMP_TIMER_HW -> timerawl + volume_ramp_delT * 1000;
@@ -217,14 +246,51 @@ void enable_volume_ramp_int() {
     irq_set_enabled(VOL_RAMP_INT_NUM, true);
 }
 
+// End volume ramp
 void disable_volume_ramp_int() {
     // Disable Interrupt
     VOL_RAMP_TIMER_HW -> inte &= ~(1 << VOL_RAMP_TIM_ALARM);
     irq_set_enabled(VOL_RAMP_INT_NUM, false);
 }
 
+//// DISPLAY SET BRIGHTNESS ////
+
+float adaptive_brightness_activation(float x) {
+    x = (x - 2048.f) * .0025f;          // Normalize Brightness
+    return 4000.f / (1.0f + expf(x));   // Min Brightness is 95/4095
+}
+
+void display_brightness_isr() {
+    uint16_t new_brightness;
+
+    if (brightness_adapt_en) {
+        // Use LDR
+        new_brightness = 0.99 * brightness_curr_val + 0.01 * adaptive_brightness_activation((float)brightness_env_adc_out);
+    } else {
+        // Use Knob
+        new_brightness = 0.95 * brightness_curr_val + 0.05 * brightness_set_adc_out;
+    }
+    
+    pwm_set_chan_level(TFT_BACKLIT_SLICE, TFT_BACKLIT_CH, new_brightness);
+}
+
+void display_brightness_configure() {
+    gpio_set_function(TFT_BACKLIT_PIN, GPIO_FUNC_PWM);
+
+    pwm_set_irq_enabled(TFT_BACKLIT_SLICE, true);
+    irq_set_exclusive_handler(TFT_BACKLIT_INT_NUM, &display_brightness_isr);
+    irq_set_enabled(TFT_BACKLIT_INT_NUM, true);
+    irq_set_priority(TFT_BACKLIT_INT_NUM, TFT_BACKLIT_INT_PRI);
+
+    pwm_set_clkdiv(TFT_BACKLIT_SLICE, 1.);
+    pwm_set_wrap(AUDIO_PWM_SLICE, 4094);                                // 0 - 4095
+    pwm_set_chan_level(TFT_BACKLIT_SLICE, TFT_BACKLIT_PIN & 1, 2048);   // Start at half brightness
+}
+
+
 //// DISPLAY NIGHT MODE ////
 
+/*
 // Handles ranges that wrap midnight
 static bool is_night_time(int hour, const NightModeConfig *cfg) {
     if (!cfg) return false;
@@ -260,6 +326,7 @@ float apply_night_mode_brightness(float knob_pct, int current_hour_24, const Nig
     set_brightness_percent(knob_pct);  // send to “hardware”
     return knob_pct;
 }
+*/
 
 //////////////////////////////////////////////////////////////////////////////
 /*
