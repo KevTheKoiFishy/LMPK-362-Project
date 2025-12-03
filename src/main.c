@@ -11,7 +11,7 @@
 #include "gps_time.h"
 #include "ambience_control.h"
 
-#define TEST_SD_CMD
+// #define TEST_SD_CMD
 // #define TEST_SD_READ_RATE
 // #define TEST_SD_AUDIO_PLAYBACK
 // #define TEST_GPS_TIME
