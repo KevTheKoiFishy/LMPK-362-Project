@@ -1,50 +1,57 @@
 #include "const.h"
 #include "ambience_control.h"
 
-//// VOLUME & VOLUME RAMP ////
-dma_channel_hw_t * volume_dma_ch = &dma_hw -> ch[VOL_DMA_CH]; // Will use for BOTH volume and Brightness!
-
-uint16_t volume_adc_out     = 4095;
-float    volume_scalar      = 1.0f;
-
-uint16_t volume_ramp_delT   = -1;
-float    volume_ramp_r      = -1.0f;
-float    volume_ramp_delR   = -1.0f;
-float    volume_ramp_a0     = -1.0f;
-float    volume_ramp_af     = -1.0f;
-bool     volume_ramp_en     = false;
-
-uint16_t get_volume_adc()       { return volume_adc_out; }
-float    get_volume_scalar()    { return volume_scalar;  }
-bool     get_volume_ramp_en()   { return volume_ramp_en; }
-
-//// BRIGHTNESS ////
-float    brightness_curr_val     = 4095.0f;
-uint16_t brightness_set_adc_out  = 2048;
-uint16_t brightness_env_adc_out  = 0;
-bool     brightness_adapt_en     = false;
-
-uint16_t get_brightness_set()   { return brightness_set_adc_out; }
-
 //// GPIO ////
 volatile knobMode knob_mode = BRIGHTNESS_MODE;
-// volatile bool button_ever_pressed = false;
+
+//// ADC DMA DESTINATION ////
+uint16_t adc_outs[ADC_ROUNDROBIN_BUF_LEN] = {4095, 0}; // Knob, LDR
+
+//// VOLUME & VOLUME RAMP ////
+dma_channel_hw_t * amb_dma_channel = &dma_hw -> ch[AMB_DMA_CH]; // Will use for BOTH volume and Brightness!
+
+uint16_t *  volume_adc_out     = adc_outs;
+uint16_t    prev_volume_adc_out = 4095;
+float       volume_scalar      = 1.0f;
+
+uint16_t    volume_ramp_delT   = -1;
+float       volume_ramp_r      = -1.0f;
+float       volume_ramp_delR   = -1.0f;
+float       volume_ramp_a0     = -1.0f;
+float       volume_ramp_af     = -1.0f;
+bool        volume_ramp_en     = false;
+
+uint16_t    get_volume_setting()    { return knob_mode == VOLUME_MODE ? *volume_adc_out : prev_volume_adc_out; }
+float       get_volume_scalar()     { return volume_scalar;  }
+bool        get_volume_ramp_en()    { return volume_ramp_en; }
+
+//// BRIGHTNESS ////
+dma_channel_hw_t * LDR_dma_ch = &dma_hw -> ch[LDR_DMA_CH];
+float       brightness_curr_val         = 0.0f;
+uint16_t *  brightness_set_adc_out      = adc_outs;
+uint16_t    prev_brightness_set_adc_out = 0;
+uint16_t *  brightness_env_adc_out      = adc_outs + 1;
+bool        brightness_adapt_en         = false;
+
+uint16_t    get_brightness_setting() { return knob_mode == BRIGHTNESS_MODE ? *brightness_set_adc_out : prev_brightness_set_adc_out; }
+uint16_t    get_brightness_env()     { return *brightness_env_adc_out; }
 
 //// GPIO ////
 
-static void init_buttons(void) {
-    gpio_set_dir(21, GPIO_IN); // button to control brightness
-    gpio_put(21, 0);
-    gpio_set_function(21, 5);
+void init_buttons(void) {
+    gpio_set_dir(BRIGHT_PUSHB_PIN, GPIO_IN); // button to control brightness
+    gpio_put(BRIGHT_PUSHB_PIN, 0);
+    gpio_set_function(BRIGHT_PUSHB_PIN, GPIO_FUNC_SIO);
 
-    gpio_set_dir(26, GPIO_IN); // button to control volume
-    gpio_put(26, 0);
-    gpio_set_function(26, 5);
+    gpio_set_dir(VOL_PUSHB_PIN, GPIO_IN); // button to control volume
+    gpio_put(VOL_PUSHB_PIN, 0);
+    gpio_set_function(VOL_PUSHB_PIN, GPIO_FUNC_SIO);
 }
 
-void gpio_isr() {    
-    if (gpio_get_irq_event_mask(21) & GPIO_IRQ_EDGE_RISE) {
-        gpio_acknowledge_irq(21, GPIO_IRQ_EDGE_RISE);
+void buttons_isr() {
+    // Brightness Button 
+    if (gpio_get_irq_event_mask(BRIGHT_PUSHB_PIN) & GPIO_IRQ_EDGE_RISE) {
+        gpio_acknowledge_irq(BRIGHT_PUSHB_PIN, GPIO_IRQ_EDGE_RISE);
 
         // Toggle Adaptive Brightness
         if (knob_mode == BRIGHTNESS_MODE) {
@@ -52,14 +59,14 @@ void gpio_isr() {
         }
         // Set knob to control brightness
         else {
+            prev_volume_adc_out = *volume_adc_out;
             knob_mode = BRIGHTNESS_MODE;
         }
-
-        volume_dma_ch -> write_addr = (uint32_t) &brightness_set_adc_out;
-        // button_ever_pressed = true;
     }
-    if (gpio_get_irq_event_mask(26) & GPIO_IRQ_EDGE_RISE) {   
-        gpio_acknowledge_irq(26, GPIO_IRQ_EDGE_RISE);
+
+    // Volume Button
+    if (gpio_get_irq_event_mask(VOL_PUSHB_PIN) & GPIO_IRQ_EDGE_RISE) {   
+        gpio_acknowledge_irq(VOL_PUSHB_PIN, GPIO_IRQ_EDGE_RISE);
 
         // Toggle volume ramping
         if (knob_mode == VOLUME_MODE) {
@@ -67,82 +74,86 @@ void gpio_isr() {
         }
         // Switch to volume mode
         else {
+            prev_brightness_set_adc_out = *brightness_set_adc_out;
             knob_mode = VOLUME_MODE;
-            volume_dma_ch -> write_addr = (uint32_t) &volume_adc_out;
         }
-        // button_ever_pressed = true;
     }
 }
 
-void init_gpio_irq() {
+void init_buttons_irq() {
     // add the handler for both pins at once, enable the GPIO IRQ for both pins and BANK0 IRQ interrupt.
-    uint32_t mask = (1u << 21) | (1u << 26);
-    gpio_add_raw_irq_handler_masked(mask, gpio_isr);
+    uint32_t mask = (1u << BRIGHT_PUSHB_PIN) | (1u << VOL_PUSHB_PIN);
+    gpio_add_raw_irq_handler_masked(mask, &buttons_isr);
 
-    // configure GP21 and GP26 to a rising edge 
-    gpio_set_irq_enabled(21, GPIO_IRQ_EDGE_RISE, true);
-    gpio_set_irq_enabled(26, GPIO_IRQ_EDGE_RISE, true);
+    // configure GP21 and GP26 to a rising edge
+    gpio_set_irq_enabled(BRIGHT_PUSHB_PIN, GPIO_IRQ_EDGE_RISE, true);
+    gpio_set_irq_enabled(VOL_PUSHB_PIN,    GPIO_IRQ_EDGE_RISE, true);
 
     // enable the top-level GPIO Bank 0 IRQ line 
     irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
-//// GET ADC CONVERSIONS ////
+//// ADC CONVERSIONS - KNOB ////
 
-// Start freerunning conversions for volume knob
-void init_volume_adc_freerun() {
+// Start round robin freerunning conversions
+static void init_ambience_adc_freerun() {
+    // Initialize ADC and Pins
     adc_init();
-    adc_gpio_init(VOL_ADC_PIN);
-    adc_select_input(VOL_ADC_PIN - 40);
-    adc_read();
+    adc_gpio_init(KNOB_ADC_PIN);
+    adc_gpio_init(LDR_ADC_PIN);
 
+    // Initial Channel = Knob
+    adc_select_input(KNOB_ADC_PIN - 40);
+
+    // Enable FIFO, Enable DREQ, DREQ threshold is 2, Disable Err Logging, Disable byte shift
+    adc_fifo_setup(true, true, ADC_ROUNDROBIN_BUF_LEN, false, false);
+
+    // Take turns converting LDR and Knob
+    adc_set_round_robin((1 << (KNOB_ADC_PIN - 40)) | (1 << (LDR_ADC_PIN - 40)));
+
+    // Round Robin Mode
     hw_set_bits(&adc_hw->cs, ADC_CS_START_MANY_BITS);
 }
 
-// Initialize volume DMA Channel
-void init_volume_dma() {
+// Initialize volume DMA Channel to trigger each time all sample conversions finish
+static void init_ambience_dma() {
 
     // Configure DMA Channel 0 to read from the ADC FIFO and write to the variable "volume". 
-    volume_dma_ch -> read_addr  = (uint32_t) &adc_hw->fifo;
-    volume_dma_ch -> write_addr = (uint32_t) &volume_adc_out;
+    amb_dma_channel -> read_addr  = (uint32_t) &adc_hw->fifo;
+    amb_dma_channel -> write_addr = (uint32_t) &adc_outs;
     
     // Set the transfer count, or TRANS_COUNT, to the arithmetic OR of two values.
-    volume_dma_ch -> transfer_count = (1u << 28) | 1u;
+    amb_dma_channel -> transfer_count = (1u << 28) | ADC_ROUNDROBIN_BUF_LEN; // 2 transfers for each DREQ
 
     // Initialize the control trigger register of the DMA to zero.
-    volume_dma_ch -> ctrl_trig = 0;
+    amb_dma_channel -> ctrl_trig = 0;
 
-    // Create a uint32_t variable called temp
-    uint32_t temp = 0;
+    // Create a uint32_t variable for control trig
+    uint32_t ctrl_trig_val = 0;
 
-    // OR in the following:
-    // left-shift the value 1 by the correct number of bits 
-    // that would correspond to the DATA_SIZE field of the DMA channel 0 configuration, 
-    // DMA_CH0_CTRL_TRIG_DATA_SIZE_VALUE_SIZE_HALFWORD _u(0x1)
-    // but you assign it to temp first.
-    temp |= (DMA_CH0_CTRL_TRIG_DATA_SIZE_VALUE_SIZE_HALFWORD << DMA_CH0_CTRL_TRIG_DATA_SIZE_LSB);
+    // Halfword (16 bit) Write
+    ctrl_trig_val |= (DMA_CH0_CTRL_TRIG_DATA_SIZE_VALUE_SIZE_HALFWORD << DMA_CH0_CTRL_TRIG_DATA_SIZE_LSB);
+
+    // Ring Write
+    ctrl_trig_val |= DMA_CH0_CTRL_TRIG_RING_SEL_BITS;                                // Ring write, not read
+    ctrl_trig_val |= ADC_ROUNDROBIN_BUF_LEN_LSB << DMA_CH0_CTRL_TRIG_RING_SIZE_LSB;  // Ring size of 1 << 1 aka 2
+    ctrl_trig_val |= DMA_CH0_CTRL_TRIG_INCR_WRITE_BITS;                              // Increment write address by 2 bytes
 
     // Specify the ADC DREQ signal as the TREQ trigger.
-    temp |= (DREQ_ADC << 17); 
+    ctrl_trig_val |= (DREQ_ADC << DMA_CH0_CTRL_TRIG_TREQ_SEL_LSB);
     
-    // set the EN bit
-    temp |= 1u;
+    // Set the EN bit
+    ctrl_trig_val |= 1u;
 
     // Write the temp variable to the dma_hw->ch[0].ctrl_trig register.
-    volume_dma_ch -> ctrl_trig = temp;
+    amb_dma_channel -> ctrl_trig = ctrl_trig_val;
 }
 
 // Initialize automatic conversions and volume_dial update.
-void init_volume_adc_and_dma() {
-    // Start DMA
+void init_ambience_adc_and_dma() {
+    // Start dma BEFORE adc so it is ready for every ADC_DREQ
     init_volume_dma();
-
-    // Start ADC
     init_volume_adc_freerun();
-
-    // Enable the ADC FIFO to store the generated samples.
-    // Configure the ADC to send out a DREQ signal whenever a new sample is ready in the FIFO. 
-    adc_fifo_setup(1, 1, 0, 0, 0);
 }
 
 //// VOLUME MODULATION -- HELPERS ////
@@ -190,7 +201,7 @@ void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint16_t ramp_ms
         float current_pct = start_pct + (end_pct - start_pct) * curved;
 
         // set volume
-        set_audio_volume(current_pct * 0.01f);
+        volume_scalar = current_pct * 0.01f;
         sleep_ms(step_ms);
     }
 
@@ -209,7 +220,7 @@ void volume_ramp_isr() {
 
     // Update ramp progress
     volume_ramp_r += volume_ramp_delR;
-    if (volume_ramp_r > 1) { disable_volume_ramp_int(); return; }
+    if (volume_ramp_r > 1.0f) { disable_volume_ramp_int(); return; }
     
     // Set next isr time.
     // !!! ENSURE ALARMS ARE SET RELATIVE TO BASE OR PREVIOUS TIME, NOT TIMERAWL AT TIME OF RUN.
@@ -255,7 +266,7 @@ void disable_volume_ramp_int() {
 
 //// DISPLAY SET BRIGHTNESS ////
 
-float adaptive_brightness_activation(float x) {
+static float adaptive_brightness_activation(float x) {
     x = (x - 2048.f) * .0025f;          // Normalize Brightness
     return 4000.f / (1.0f + expf(x));   // Min Brightness is 95/4095
 }
@@ -265,10 +276,10 @@ void display_brightness_isr() {
 
     if (brightness_adapt_en) {
         // Use LDR
-        new_brightness = 0.99 * brightness_curr_val + 0.01 * adaptive_brightness_activation((float)brightness_env_adc_out);
+        new_brightness = 0.99 * brightness_curr_val + 0.01 * adaptive_brightness_activation((float)(*brightness_env_adc_out));
     } else {
         // Use Knob
-        new_brightness = 0.95 * brightness_curr_val + 0.05 * brightness_set_adc_out;
+        new_brightness = 0.95 * brightness_curr_val + 0.05 * get_brightness_setting();
     }
     
     pwm_set_chan_level(TFT_BACKLIT_SLICE, TFT_BACKLIT_CH, new_brightness);
@@ -286,7 +297,6 @@ void display_brightness_configure() {
     pwm_set_wrap(AUDIO_PWM_SLICE, 4094);                                // 0 - 4095
     pwm_set_chan_level(TFT_BACKLIT_SLICE, TFT_BACKLIT_PIN & 1, 2048);   // Start at half brightness
 }
-
 
 //// DISPLAY NIGHT MODE ////
 
@@ -329,6 +339,7 @@ float apply_night_mode_brightness(float knob_pct, int current_hour_24, const Nig
 */
 
 //////////////////////////////////////////////////////////////////////////////
+
 /*
 void control_update (void) {   
     stdio_init_all();

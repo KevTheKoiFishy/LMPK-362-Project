@@ -52,10 +52,17 @@ int main() {
     printf("\n[OK] SDCard: Mounted Volume 0");
 
     /////////////////
-    // AUDIO-VOL   //
+    // VOL, BRIGHT //
     /////////////////
-    init_volume_adc_and_dma();
-    printf("\n[OK] Volume: ADC, DMA Started");
+    init_buttons();
+    init_buttons_irq();
+    printf("\n[OK] Buttons: Int Set");
+
+    display_brightness_configure();
+    printf("\n[OK] Display Backlit: Int Set");
+
+    init_ambience_adc_and_dma();
+    printf("\n[OK] Knob, LDR: ADC, DMA Started");
     
     #ifdef TEST_SD_CMD
         sd_command_shell(); // uncomment for debug

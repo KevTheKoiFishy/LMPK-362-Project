@@ -482,7 +482,7 @@ void              step_audio_isr() {
     pwm_hw -> intr  |= (1 << AUDIO_PWM_SLICE);
 
     #ifdef DOUBLE_BUFFER
-        if (i_audio_buf_r == 0) 
+        if (i_audio_buf_r == 0) {
             // Swap buffers
             int16_t * temp  = audio_buffer_wp;
             audio_buffer_wp = audio_buffer_rp;
@@ -494,7 +494,7 @@ void              step_audio_isr() {
             } else {
                 audio_load_flag = true;
             }
-        
+        }
     #else
         uint16_t buff_readable = get_buff_readable();
         if (buff_readable <= 1) {
@@ -503,7 +503,7 @@ void              step_audio_isr() {
         }
     #endif
 
-    uint16_t dial       = get_volume_adc();
+    uint16_t dial       = get_volume_setting();
     float    dial_sq    = ((uint32_t)dial * dial) * 5.96337592674589e-8;        // Multiply by squared ratio of volume dial
     float    audio_vol  = get_volume_scalar() * dial_sq;                        // Multiply by additional scalar, ie. ramping
     int16_t  samp       = (audio_buffer_rp[i_audio_buf_r]);                     // Retrieve FIFO

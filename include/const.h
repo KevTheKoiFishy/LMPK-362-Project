@@ -23,9 +23,10 @@
 #define TIME_ZONE_OFFSET    -4
 #define DAYLIGHT_SAVINGS_EN false
 
-// ONBOARD - sio, unused
+// ONBOARD - sio
 #define ONBOARD_LEDS        {22, 23, 24, 25}
-#define ONBOARD_PUSHBUTTONS {21, 26}
+#define BRIGHT_PUSHB_PIN    21
+#define VOL_PUSHB_PIN       26
 
 // KEYPAD - sio
 #define NUM_PAD_PINS        8
@@ -49,10 +50,10 @@
 #define VOL_RAMP_INT_NUM    TIMER0_IRQ_1
 #define VOL_RAMP_TIM_ALARM  1
 #define VOL_RAMP_INT_PRI    2
-#define VOL_ADC_PIN         45
-#define VOL_DMA_CH          0
+#define KNOB_ADC_PIN        45
+#define AMB_DMA_CH          0
 
-// DISPLAY (Maddie) - sio, spi1, pwm5ab
+// DISPLAY (Maddie) - sio, spi1
 #define TFT_SPI             spi1
 #define TFT_PIN_SCK         10
 
@@ -61,11 +62,16 @@
 #define TFT_PIN_DC          14 
 #define TFT_PIN_RST         16 
 
+// DISPLAY BRIGHTNESS (Leah, Kevin) - pwm5a, adc4
+
 #define TFT_BACKLIT_INT_NUM PWM_IRQ_WRAP_1
 #define TFT_BACKLIT_INT_PRI 2
 #define TFT_BACKLIT_SLICE   5
 #define TFT_BACKLIT_PIN     26
 #define TFT_BACKLIT_CH      (TFT_BACKLIT_PIN & 1)
+
+#define LDR_ADC_PIN         44
+#define LDR_DMA_CH          1
 
 // SD CARD - spi0
 #define SD_SPI_PORT         spi0
@@ -81,10 +87,3 @@
 #define AUDIO_PWM_SLICE     11
 #define AUDIO_PWM_PIN_L     38
 #define AUDIO_PWM_PIN_H     39
-
-/* leah:
-    volume:
-        hysteresis on volume potentiometer - adc - 
-        alarm vol ramp  - function
-    dyanmic brightness adjustment - potentially pwm
-*/
