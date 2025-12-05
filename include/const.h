@@ -60,15 +60,15 @@
 
 #define TFT_PIN_MOSI        15 
 #define TFT_PIN_CS          13 
-#define TFT_PIN_DC          14 
+#define TFT_PIN_DC          14
 #define TFT_PIN_RST         16 
 
 // DISPLAY BRIGHTNESS (Leah, Kevin) - pwm5a, adc4
 
 #define TFT_BACKLIT_INT_NUM PWM_IRQ_WRAP_1
 #define TFT_BACKLIT_INT_PRI 2
-#define TFT_BACKLIT_SLICE   5
-#define TFT_BACKLIT_PIN     26
+#define TFT_BACKLIT_SLICE   6
+#define TFT_BACKLIT_PIN     28
 #define TFT_BACKLIT_CH      (TFT_BACKLIT_PIN & 1)
 
 #define LDR_ADC_PIN         44

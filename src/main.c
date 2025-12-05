@@ -24,10 +24,9 @@
 // #define TEST_SD_READ_RATE
 // #define TEST_SD_AUDIO_PLAYBACK
 // #define TEST_GPS_TIME
-// #define TEST_VOLUME_UPDATE
+// #define TEST_AMB_UPDATE
 
 void core_1_main() {
-    printf("\n[OK] Core 1: Main Set Up.");
     core1_loop:
         core1_maintain_audio_buff_routine();
     goto core1_loop;
@@ -36,9 +35,11 @@ void core_1_main() {
 int main() {
 
     // SETUP AND INTERRUPTS HERE
-    sleep_ms(10);
-    printf("\n\n\n\nBooting.");
+    init_uart();
 
+    printf("\r\n\r\n");
+    printf("Booting.");
+    
     /////////////////
     // MULTICORE!  //
     /////////////////
@@ -49,8 +50,6 @@ int main() {
     /////////////////
     // SD CARD     //
     /////////////////
-    // Initialize the standard input/output library
-    init_uart();
     init_uart_irq();
     init_sdcard_io();
     printf("\n[OK] SDCard: IO Started");
@@ -68,11 +67,11 @@ int main() {
     init_buttons_irq();
     printf("\n[OK] Buttons: Int Set");
 
-    display_brightness_configure();
-    printf("\n[OK] Display Backlit: Int Set");
-
     init_ambience_adc_and_dma();
     printf("\n[OK] Knob, LDR: ADC, DMA Started");
+
+    display_brightness_configure();
+    printf("\n[OK] Display Backlit: Int Set");
 
     /////////////////
     // KEYPAD      //
@@ -84,7 +83,6 @@ int main() {
     /////////////////
     // DISPLAY     //
     /////////////////
-    
     #ifdef TEST_SD_CMD
         sd_command_shell(); // uncomment for debug
     #endif
@@ -108,7 +106,6 @@ int main() {
 
     #ifdef TEST_SD_AUDIO_PLAYBACK
         open_sd_audio_file(DEFAULT_AUDIO_PATH);
-        audio_file_lseek(0x5500);
         configure_audio_play();
         start_audio_playback();
     #endif
@@ -124,9 +121,12 @@ int main() {
             printf("\nGPS Time: "); printf(gps_get_timestr()); printf("\n\n");
         #endif
 
-        #ifdef TEST_VOLUME_UPDATE
+        #ifdef TEST_AMB_UPDATE
             sleep_ms(200);
-            printf("\nVolume | ADC: %4ld, Scalar: %.6f", get_volume_adc(), get_volume_scalar());
+            printf("\n");
+            printf("\nKnob Mode  | %s", get_knob_mode() == BRIGHTNESS_MODE ? "BRIGHTNESS" : "VOLUME");
+            printf("\nVolume     | Ramp:  %s, Setting: %4d, Scalar: %6.3f",       get_volume_ramp_en()      ? "T" : "F", get_volume_setting(), get_volume_scalar());
+            printf("\nBrightness | Adapt: %s, Setting: %4d, LDR:    %6d, Value: %6d"  ,  get_brightness_adapt_en() ? "T" : "F", get_brightness_setting(), get_brightness_env(), (uint16_t)get_brightness_valf());
         #endif
 
         alarm_fire_sequence();

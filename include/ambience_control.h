@@ -32,9 +32,16 @@ void buttons_isr();
 void init_buttons_irq();
 
 // Short Functions
-uint16_t    get_volume_setting();
-float       get_volume_scalar() ;
-bool        get_volume_ramp_en();
+knobMode    get_knob_mode();
+
+uint16_t    get_volume_setting() ;
+float       get_volume_scalar()  ;
+bool        get_volume_ramp_en() ;
+
+uint16_t    get_brightness_setting()  ;
+uint16_t    get_brightness_env()      ;
+float       get_brightness_valf()     ;
+bool        get_brightness_adapt_en() ;
 
 // ADC
 #define     ADC_ROUNDROBIN_BUF_LEN_LSB  1 // Len must be power of 2 for DMA's sake

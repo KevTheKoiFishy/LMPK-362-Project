@@ -95,7 +95,7 @@ int _read(__unused int handle, char *buffer, int length) {
 int _write(__unused int handle, char *buffer, int length) {
     uint8_t i;
     for (i = 0; i < length; ++i) {
-        uart_putc(uart0, buffer[i]);
+        UART_WAIT(); uart0_hw -> dr = buffer[i]; 
     }
     return i;
 }

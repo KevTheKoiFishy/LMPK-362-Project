@@ -597,7 +597,7 @@ void              configure_audio_play() {
     );
 
     if (audio_pwm_frq > 33e3) {
-        printf("    (WARNING) Sampling Frequencies above 32kHz are prone to buffer overruns!");
+        printf("    (WARNING) Sampling Frequencies above 32kHz are prone to buffer overruns!\n");
     }
 
     // Init both channels to 0 duty
