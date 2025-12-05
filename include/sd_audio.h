@@ -91,6 +91,7 @@ void                step_audio_isr();
 void                configure_audio_play();
 void                start_audio_playback();
 void                stop_audio_playback();
+bool                is_audio_playing();
 
 void                audio_play_sequence(char * filename);
 

@@ -56,6 +56,8 @@ volatile uint32_t * cc_reg          = &(pwm_hw -> slice[AUDIO_PWM_SLICE].cc);
 // Core1 -> core0 flags
             bool    audio_copying   = false;
 
+bool is_audio_playing() { return audio_playing; }
+
 // HELPER FUNCTIONS //
 
 uint32_t to_little_endian(uint32_t x) {

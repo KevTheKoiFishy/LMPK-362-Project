@@ -298,7 +298,7 @@ void cd_update(int hour, int minute, int second, bool gps_found, int alarm_hour,
     current_time(hour, minute);
     cd_alarm(alarm_hour, alarm_minute, alarm_enabled);
 
-    if (alarm_ringing) 
+    if (alarm_ringing)
     {
         bool tilt = ((second % 2) == 0);
         draw_bell(tilt);

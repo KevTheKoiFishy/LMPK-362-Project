@@ -4,9 +4,7 @@ KeyEvents kev = { .q = {0}, .head = 0, .tail = 0 };
 
 uint16_t key_pop() {
     // Queue is empty
-    while (kev.head == kev.tail) {
-        sleep_ms(10);   // Wait for an event to be pushed
-    }
+    if (kev.head == kev.tail) { return -1; }
     uint16_t value = kev.q[kev.tail];
     kev.tail = (kev.tail + 1) % 32;
     return value;

@@ -3,7 +3,6 @@
 
 #include    "time_utils.h"
 
-
 #define     TIME_ZONE_OFFSET    -4
 #define     DAYLIGHT_SAVINGS_EN false
 
@@ -19,7 +18,7 @@ my_time_t   get_utc_time()      ;
 my_date_t   get_utc_date()      ;
 my_time_t   get_local_std_time();
 my_date_t   get_local_std_date();
-my_time_t   get_local_dst_time();
+my_time_t   get_local_dst_time(); 
 my_date_t   get_local_dst_date();
 my_time_t   get_local_time()    ;
 my_date_t   get_local_date()    ;

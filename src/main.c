@@ -17,7 +17,9 @@
 
 #include "tft_display.h"
 #include "tft_chardisp.h"
+#include "tft_main.h"
 
+#include "keypad_queue.h"
 #include "keypad.h"
 
 // #define TEST_SD_CMD
@@ -26,6 +28,8 @@
 // #define TEST_GPS_TIME
 // #define TEST_AMB_UPDATE
 #define TEST_LOCAL_TIME
+// #define TEST_KEYPAD
+// #define TEST_TFT_MAIN
 
 void core_1_main() {
     core1_loop:
@@ -34,6 +38,11 @@ void core_1_main() {
 }
 
 int main() {
+
+    #ifdef TEST_TFT_MAIN
+        return tft_main();
+    #endif
+
 
     // SETUP AND INTERRUPTS HERE
     init_uart();
@@ -47,7 +56,7 @@ int main() {
     stdio_init_all(); // Enable multicore
     multicore_launch_core1(&core_1_main);
     printf("\n[OK] Core 1: Main Launched");
-    
+
     /////////////////
     // SD CARD     //
     /////////////////
@@ -85,10 +94,6 @@ int main() {
     printf("\n[OK] Keypad: Pins, Timer started");
 
     /////////////////
-    // DISPLAY     //
-    /////////////////
-
-    /////////////////
     // GPS-UART    //
     /////////////////
     init_gps_uart(); // GPS time updates automatically!!
@@ -99,7 +104,15 @@ int main() {
     /////////////////
     config_time_update_int();
     printf("\n[OK] Time: Update Int Set");
-    
+
+    /////////////////
+    // DISPLAY     //
+    /////////////////
+    tft_init_pins();
+    tft_init();
+    cd_clear();
+    printf("\n[OK] TFT Display: Initialized");
+
     #ifdef TEST_SD_CMD
         sd_command_shell(); // uncomment for debug
     #endif
@@ -127,7 +140,43 @@ int main() {
         start_audio_playback();
     #endif
 
+    // TIME VARIABLES
+    my_time_t    utc_time      ;
+    my_date_t    utc_date      ;
+    my_time_t    local_std_time;
+    my_date_t    local_std_date;
+    my_time_t    local_dst_time;
+    my_date_t    local_dst_date;
+    my_time_t    local_time    ;
+    my_date_t    local_date    ;
+    my_alarm_t   alarm_cfg     ;
+    gps_status_t gps_status    ;
+
     core0_loop:
+        utc_time          =   get_utc_time();
+        utc_date          =   get_utc_date();
+        local_std_time    =   get_local_std_time();
+        local_std_date    =   get_local_std_date();
+        local_dst_time    =   get_local_dst_time();
+        local_dst_date    =   get_local_dst_date();
+        local_time        =   get_local_time();
+        local_date        =   get_local_date();
+        alarm_cfg         =   get_alarm_cfg();
+        gps_status        =   gps_get_status();
+
+        alarm_fire_routine();
+        cd_update(
+            local_time.hours,
+            local_time.minutes,
+            local_time.seconds,
+            gps_status == GOT_DATETIME,
+            alarm_cfg.hours,
+            alarm_cfg.minutes,
+            alarm_cfg.enabled,
+            is_audio_playing()
+        );
+        sleep_ms(1000);
+
         #ifdef TEST_AMB_UPDATE
             sleep_ms(200);
             printf("\n");
@@ -142,18 +191,6 @@ int main() {
         #endif
 
         #ifdef TEST_LOCAL_TIME
-            sleep_ms(1000);
-
-            my_time_t utc_time          =   get_utc_time();
-            my_date_t utc_date          =   get_utc_date();
-            my_time_t local_std_time    =   get_local_std_time();
-            my_date_t local_std_date    =   get_local_std_date();
-            my_time_t local_dst_time    =   get_local_dst_time();
-            my_date_t local_dst_date    =   get_local_dst_date();
-            my_time_t local_time        =   get_local_time();
-            my_date_t local_date        =   get_local_date();
-            my_alarm_t alarm_cfg        =   get_alarm_cfg();
-
             printf("\n--- Local Time Info ---");
             printf("\n  GPS Status     | %s", gps_get_status() == GOT_DATETIME ? "GOT DATETIME" : gps_get_status() == GOT_TIME ? "GOT TIME" : gps_get_status() == CONNECTING ? "CONNECTING" : "UNKNOWN");
 
@@ -165,7 +202,19 @@ int main() {
             printf("\n-----------------------\n");
         #endif
 
-        alarm_fire_routine();
+        #ifdef TEST_KEYPAD
+            uint16_t keyevent = key_pop();
+
+            if (keyevent == (uint16_t)-1) {
+                printf("\nKEV: No Key Event\n");
+            }
+            else {
+                if (keyevent & (1 << 8))
+                    printf("\nKEV: Pressed  %c\n", (char) (keyevent & 0xFF));
+                else if (keyevent != 0)
+                    printf("\nKEV: Released %c\n", (char) (keyevent & 0xFF));
+            }
+        #endif
 
     goto core0_loop;
     

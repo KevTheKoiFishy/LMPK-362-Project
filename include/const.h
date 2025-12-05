@@ -66,19 +66,19 @@
 
 // DISPLAY (Maddie) - sio, spi1
 #define TFT_SPI             spi1
-#define TFT_PIN_SCK         10
+#define TFT_PIN_SCK         30
 
-#define TFT_PIN_MOSI        15 
-#define TFT_PIN_CS          13 
-#define TFT_PIN_DC          14
-#define TFT_PIN_RST         16 
+#define TFT_PIN_MOSI        31
+#define TFT_PIN_CS          29
+#define TFT_PIN_DC          28
+#define TFT_PIN_RST         27
 
-// DISPLAY BRIGHTNESS (Leah, Kevin) - pwm5a, adc4
+// DISPLAY BRIGHTNESS (Leah, Kevin) - pwm8a, adc4
 
 #define TFT_BACKLIT_INT_NUM PWM_IRQ_WRAP_1
 #define TFT_BACKLIT_INT_PRI 2
-#define TFT_BACKLIT_SLICE   6
-#define TFT_BACKLIT_PIN     28
+#define TFT_BACKLIT_SLICE   3
+#define TFT_BACKLIT_PIN     23
 #define TFT_BACKLIT_CH      (TFT_BACKLIT_PIN & 1)
 
 #define LDR_ADC_PIN         44

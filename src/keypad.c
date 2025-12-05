@@ -6,6 +6,7 @@
 #include "const.h"
 #include "keypad.h"
 #include "keypad_queue.h"
+#include "user_interface.h"
 
 // Global column variable
 int keypad_col_driven = -1;
@@ -78,8 +79,10 @@ void keypad_isr() {
     for (uint8_t row = 0; row < 4; ++row) {
         uint8_t keypad_state_now = (row_read & 1);
         if (keypad_state[li] != keypad_state_now) {
-            key_push((keypad_state_now ? 0x100 : 0x0) | keymap[li]);
+            uint16_t keyevent = (keypad_state_now ? 0x100 : 0x0) | keymap[li];
+            key_push(keyevent); ui_process_keypad(keyevent);
             keypad_state[li] = keypad_state_now;
+            
         }
 
         ++li;
