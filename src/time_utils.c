@@ -3,6 +3,13 @@
 #include <stdio.h>
 #include "time_utils.h"
 
+// Printouts
+char timestr_temp[20];
+char * get_timestr(my_date_t date, my_time_t time) {
+    sprintf(timestr_temp, "%02d:%02d:%02d %02d-%02d-%04d", time.hours, time.minutes, time.seconds, date.month, date.day, date.year);
+    return timestr_temp;
+}
+
 // Convert UTC to local date
 my_date_t convert_timezone_date(my_time_t utc_time, my_date_t utc_date, int8_t offset_hours) {
     if ((int8_t)utc_time.hours + offset_hours < 0)  { return decrement_date(utc_date); }

@@ -1,4 +1,5 @@
 #include "const.h"
+#include "arbitration.h"
 #include "ambience_control.h"
 
 //// GPIO ////
@@ -222,6 +223,7 @@ void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint16_t ramp_ms
 //// VOLUME MODULATION -- SCHEDULED ////
 
 // Update volume_scalar by ramping rules.
+// bool volume_ramp_isr(__unused struct repeating_timer *t) {
 void volume_ramp_isr() {
     // Ack
     VOL_RAMP_TIMER_HW -> intr |= 1 << VOL_RAMP_TIM_ALARM;
@@ -236,6 +238,8 @@ void volume_ramp_isr() {
     // Set next isr time.
     // !!! ENSURE ALARMS ARE SET RELATIVE TO BASE OR PREVIOUS TIME, NOT TIMERAWL AT TIME OF RUN.
     VOL_RAMP_TIMER_HW -> alarm[VOL_RAMP_TIM_ALARM] += volume_ramp_delT * 1000;
+
+    // return true;
 }
 
 // Initialize ramp rules.
@@ -252,21 +256,29 @@ void configure_volume_ramp_int(float start_ratio, float end_ratio, uint16_t ramp
     volume_ramp_delT    = step_ms;
     volume_ramp_r       = 0.f;
     volume_ramp_delR    = (float)step_ms / ramp_ms;
-    
-    // Set up isr
-    irq_set_exclusive_handler(VOL_RAMP_INT_NUM, &volume_ramp_isr);
-    irq_set_priority(VOL_RAMP_INT_NUM, VOL_RAMP_INT_PRI);
+
+    // timer_hardware_alarm_set_callback(VOL_RAMP_TIMER_HW, VOL_RAMP_TIM_ALARM, &timer0_alarm_irq_dispatcher);
+    // add_repeating_timer_ms(-volume_ramp_delT, &volume_ramp_isr, NULL, &vol_ramp_timer);
 }
 
 // Start volume ramp - start_audio_playback will be responsible for triggering when get_volume_ramp_en() is true;
-void enable_volume_ramp_int() {
-    // Set up initial trigger time
-    VOL_RAMP_TIMER_HW -> alarm[VOL_RAMP_TIM_ALARM] = VOL_RAMP_TIMER_HW -> timerawl + volume_ramp_delT * 1000;
-    printf("\n  Starting alarm volume ramp: %.1f%% -> %.1f%% over %d ms by %d ms\n", volume_ramp_a0*100.f, volume_ramp_af*100.f, volume_ramp_tF, volume_ramp_delT);
+// static struct repeating_timer vol_ramp_timer;
+void init_volume_ramp_int() {
+    // Enable interrupt
+    irq_handler_t current_handler = irq_get_exclusive_handler(VOL_RAMP_INT_NUM);
+    irq_set_exclusive_handler(VOL_RAMP_INT_NUM, &volume_ramp_isr);
+    // irq_add_shared_handler(VOL_RAMP_INT_NUM, &timer0_alarm_irq_dispatcher, PICO_SHARED_IRQ_HANDLER_DEFAULT_ORDER_PRIORITY);
+    irq_set_priority(VOL_RAMP_INT_NUM, VOL_RAMP_INT_PRI);
+}
 
+void enable_volume_ramp_int() {
     // Enable interrupt
     VOL_RAMP_TIMER_HW -> inte |= (1 << VOL_RAMP_TIM_ALARM);
     irq_set_enabled(VOL_RAMP_INT_NUM, true);
+
+    // Set up initial trigger time
+    VOL_RAMP_TIMER_HW -> alarm[VOL_RAMP_TIM_ALARM] = VOL_RAMP_TIMER_HW -> timerawl + volume_ramp_delT * 1000;
+    printf("\n  Starting alarm volume ramp: %.1f%% -> %.1f%% over %d ms by %d ms\n", volume_ramp_a0*100.f, volume_ramp_af*100.f, volume_ramp_tF, volume_ramp_delT);
 }
 
 // End volume ramp
@@ -274,6 +286,7 @@ void disable_volume_ramp_int() {
     // Disable Interrupt
     VOL_RAMP_TIMER_HW -> inte &= ~(1 << VOL_RAMP_TIM_ALARM);
     irq_set_enabled(VOL_RAMP_INT_NUM, false);
+    // cancel_repeating_timer(&vol_ramp_timer);
 }
 
 //// DISPLAY SET BRIGHTNESS ////

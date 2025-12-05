@@ -42,15 +42,25 @@
 // GPS MODULE - uart1
 #define GPS_UART_PORT       uart1
 #define GPS_UART_IRQ        UART_IRQ_NUM(GPS_UART_PORT)
-#define GPS_UART_INT_PRI    1
+#define GPS_UART_INT_PRI    2
 #define GPS_PIN_TX          24
 #define GPS_PIN_RX          25
 
-// VOLUME CONTROL - adc4
-#define VOL_RAMP_TIMER_HW   timer0_hw
-#define VOL_RAMP_INT_NUM    TIMER0_IRQ_2
-#define VOL_RAMP_TIM_ALARM  2
-#define VOL_RAMP_INT_PRI    2
+// LISTEN IDK WHO DAFUQ IS USING TIMER0_IRQ_3 BUT IT'S TAKEN
+// EVEN BEFORE MAIN IS CALLED AND WILL GIVE YOU A HARD FAULT
+// DO NOT USE ITTTTTT 😡😡😡😡😡😡😡😡😡😡😡😡😡😡😡😡😡😡😡😡
+
+// TIME UPDATES - timer0
+#define TIME_STEP_TIMER_HW  timer1_hw
+#define TIME_STEP_INT_NUM   TIMER1_IRQ_0
+#define TIME_STEP_ALARM     0
+#define TIME_STEP_INT_PRI   1
+
+// VOLUME CONTROL - adc4, timer0
+#define VOL_RAMP_TIMER_HW   timer1_hw
+#define VOL_RAMP_INT_NUM    TIMER1_IRQ_1
+#define VOL_RAMP_TIM_ALARM  1
+#define VOL_RAMP_INT_PRI    3
 #define KNOB_ADC_PIN        45
 #define AMB_DMA_CH          0
 

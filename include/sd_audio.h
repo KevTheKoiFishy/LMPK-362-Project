@@ -46,7 +46,7 @@ typedef struct {
 
 // Audio File
 // #define             READ_BIG_ENDIAN
-#define             DEFAULT_AUDIO_PATH  "AUDIO/SHAUN~14.WAV"
+#define             DEFAULT_AUDIO_PATH  "AUDIO/NOVOA~28.WAV"
 
 // PWM Playback
 #define             CLIP(x, min, max)                   ( x < min ? min : x > max ? max : x )

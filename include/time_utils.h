@@ -46,6 +46,8 @@ typedef struct {
 } my_timer_t;
 
 // Function prototypes
+char *      get_timestr(my_date_t date, my_time_t time);
+
 my_date_t   convert_timezone_date(my_time_t utc_time, my_date_t utc_date, int8_t offset_hours);
 my_time_t   convert_timezone(my_time_t utc_time, int8_t offset_hours);
 

@@ -55,8 +55,10 @@ void        init_ambience_adc_and_dma();
 #define     VOLUME_RAMP_POW_CURVE_EXP   2.0f
 
 void        alarm_volume_ramp_blocking(float start_pct, float end_pct, uint16_t ramp_ms, uint16_t step_ms);
+// bool        volume_ramp_isr(__unused struct repeating_timer *t);
 void        volume_ramp_isr();
 void        configure_volume_ramp_int(float start_ratio, float end_ratio, uint16_t ramp_ms, uint16_t step_ms);
+void        init_volume_ramp_int();
 void        enable_volume_ramp_int();
 void        disable_volume_ramp_int();
 

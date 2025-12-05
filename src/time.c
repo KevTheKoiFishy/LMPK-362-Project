@@ -1,3 +1,8 @@
+#include    <hardware/timer.h>
+#include    <hardware/irq.h>
+
+#include    "arbitration.h"
+
 #include    "time.h"
 #include    "time_utils.h"
 
@@ -7,10 +12,10 @@
 
 my_time_t   utc_time, local_std_time, local_dst_time;
 my_date_t   utc_date, local_std_date, local_dst_date;
-my_alarm_t  alarm_cfg;
+my_alarm_t  alarm_cfg = {.hours = 20, .minutes = 1, .enabled = true, .fire = false};
 
-bool        use_daylight_savings                = true;
-bool        time_zone_offset                    = TIME_ZONE_OFFSET; // STANDARD time zone offset
+bool        use_daylight_savings                = false;
+int8_t      time_zone_offset                    = TIME_ZONE_OFFSET; // STANDARD time zone offset
 
 void        dst_enable()                        { use_daylight_savings = true;  }
 void        dst_disable()                       { use_daylight_savings = false; }
@@ -31,18 +36,21 @@ my_date_t   get_local_date()                    { return use_daylight_savings ? 
 
 //// TIME UPDATES ////
 
+// Update time each second
+// bool time_update_isr(__unused struct repeating_timer *t) {
 void time_update_isr() {
     static bool datetime_obtained = false;
 
-    // TODO: ACK
+    // Acknowledge
+    TIME_STEP_TIMER_HW -> intr |= 1 << TIME_STEP_ALARM;
 
     if (gps_get_status() == CONNECTING) { return; }
 
     if (!datetime_obtained){
+        if (gps_get_status() == GOT_DATETIME) { datetime_obtained = true; }
         // Get UTC Time
         utc_time        = gps_get_time();
         utc_date        = gps_get_date();
-        if (gps_get_status() == GOT_DATETIME) { datetime_obtained = true; }
 
         // Get Standard Time
         local_std_time  = convert_timezone(utc_time, time_zone_offset);
@@ -62,11 +70,33 @@ void time_update_isr() {
 
     // Check for alarm
     alarm_cfg.fire      = check_alarm(get_local_time(), alarm_cfg);
+
+    // Update next isr time.
+    TIME_STEP_TIMER_HW -> alarm[TIME_STEP_ALARM] += 1000000; // 1 second
+}
+
+// Configure time update interrupt
+void config_time_update_int() {
+    // Set up initial trigger time
+    TIME_STEP_TIMER_HW -> inte |= (1 << TIME_STEP_ALARM);
+    
+    // Enable interrupt
+    irq_handler_t current_handler = irq_get_exclusive_handler(TIME_STEP_INT_NUM);
+    // irq_set_exclusive_handler(TIME_STEP_INT_NUM, NULL);
+    irq_set_exclusive_handler(TIME_STEP_INT_NUM, &time_update_isr);
+    // irq_add_shared_handler(TIME_STEP_INT_NUM, &timer0_alarm_irq_dispatcher, PICO_SHARED_IRQ_HANDLER_DEFAULT_ORDER_PRIORITY);
+    irq_set_priority(TIME_STEP_INT_NUM, TIME_STEP_INT_PRI);
+    irq_set_enabled(TIME_STEP_INT_NUM, true);
+    TIME_STEP_TIMER_HW -> alarm[TIME_STEP_ALARM] = TIME_STEP_TIMER_HW -> timerawl + 1000000; // 1 second
+
+    // timer_hardware_alarm_set_callback(TIME_STEP_TIMER_HW, TIME_STEP_ALARM, &timer0_alarm_irq_dispatcher);
+    // add_repeating_timer_ms(-1000, &time_update_isr, NULL, NULL); // alternative to above line
 }
 
 //// ALARM ////
 
-void alarm_fire_sequence() {
+// Trigger alarm sequence if alarm fired
+void alarm_fire_routine() {
     if (!alarm_cfg.fire) { return; }
     alarm_cfg.fire = false;
 

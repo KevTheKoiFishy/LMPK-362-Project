@@ -20,11 +20,12 @@
 
 #include "keypad.h"
 
-#define TEST_SD_CMD
+// #define TEST_SD_CMD
 // #define TEST_SD_READ_RATE
 // #define TEST_SD_AUDIO_PLAYBACK
 // #define TEST_GPS_TIME
 // #define TEST_AMB_UPDATE
+#define TEST_LOCAL_TIME
 
 void core_1_main() {
     core1_loop:
@@ -69,6 +70,9 @@ int main() {
 
     init_ambience_adc_and_dma();
     printf("\n[OK] Knob, LDR: ADC, DMA Started");
+    
+    init_volume_ramp_int();
+    printf("\n[OK] Volume Ramp: Int Set");
 
     display_brightness_configure();
     printf("\n[OK] Display Backlit: Int Set");
@@ -83,6 +87,19 @@ int main() {
     /////////////////
     // DISPLAY     //
     /////////////////
+
+    /////////////////
+    // GPS-UART    //
+    /////////////////
+    init_gps_uart(); // GPS time updates automatically!!
+    printf("\n[OK] GPS-UART: Sream parse routine started");
+
+    /////////////////
+    // TIME        //
+    /////////////////
+    config_time_update_int();
+    printf("\n[OK] Time: Update Int Set");
+    
     #ifdef TEST_SD_CMD
         sd_command_shell(); // uncomment for debug
     #endif
@@ -110,17 +127,7 @@ int main() {
         start_audio_playback();
     #endif
 
-    /////////////////
-    // GPS-UART    //
-    /////////////////
-    init_gps_uart(); // GPS time updates automatically!!
-
     core0_loop:
-        #ifdef TEST_GPS_TIME
-            sleep_ms(1000);
-            printf("\nGPS Time: "); printf(gps_get_timestr()); printf("\n\n");
-        #endif
-
         #ifdef TEST_AMB_UPDATE
             sleep_ms(200);
             printf("\n");
@@ -129,7 +136,36 @@ int main() {
             printf("\nBrightness | Adapt: %s, Setting: %4d, LDR:    %6d, Value: %6d"  ,  get_brightness_adapt_en() ? "T" : "F", get_brightness_setting(), get_brightness_env(), (uint16_t)get_brightness_valf());
         #endif
 
-        alarm_fire_sequence();
+        #ifdef TEST_GPS_TIME
+            sleep_ms(1000);
+            printf("\nGPS Time: "); printf(gps_get_timestr()); printf("\n\n");
+        #endif
+
+        #ifdef TEST_LOCAL_TIME
+            sleep_ms(1000);
+
+            my_time_t utc_time          =   get_utc_time();
+            my_date_t utc_date          =   get_utc_date();
+            my_time_t local_std_time    =   get_local_std_time();
+            my_date_t local_std_date    =   get_local_std_date();
+            my_time_t local_dst_time    =   get_local_dst_time();
+            my_date_t local_dst_date    =   get_local_dst_date();
+            my_time_t local_time        =   get_local_time();
+            my_date_t local_date        =   get_local_date();
+            my_alarm_t alarm_cfg        =   get_alarm_cfg();
+
+            printf("\n--- Local Time Info ---");
+            printf("\n  GPS Status     | %s", gps_get_status() == GOT_DATETIME ? "GOT DATETIME" : gps_get_status() == GOT_TIME ? "GOT TIME" : gps_get_status() == CONNECTING ? "CONNECTING" : "UNKNOWN");
+
+            printf("\n  UTC Time       | %02d:%02d:%02d %04d-%02d-%02d", utc_time.hours, utc_time.minutes, utc_time.seconds, utc_date.year, utc_date.month, utc_date.day);
+            printf("\n  Local STD Time | %02d:%02d:%02d %04d-%02d-%02d", local_std_time.hours, local_std_time.minutes, local_std_time.seconds, local_std_date.year, local_std_date.month, local_std_date.day);
+            printf("\n  Local DST Time | %02d:%02d:%02d %04d-%02d-%02d", local_dst_time.hours, local_dst_time.minutes, local_dst_time.seconds, local_dst_date.year, local_dst_date.month, local_dst_date.day);
+            printf("\n  Local Time     | %02d:%02d:%02d %04d-%02d-%02d", local_time.hours, local_time.minutes, local_time.seconds, local_date.year, local_date.month, local_date.day);
+            printf("\n  Alarm Config   | %02d:%02d:00, %s %s", alarm_cfg.hours, alarm_cfg.minutes, alarm_cfg.enabled ? "ENABLED" : "DISABLED", alarm_cfg.fire ? "FIRING" : "");
+            printf("\n-----------------------\n");
+        #endif
+
+        alarm_fire_routine();
 
     goto core0_loop;
     

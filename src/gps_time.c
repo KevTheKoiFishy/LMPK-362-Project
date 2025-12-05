@@ -7,12 +7,13 @@
 #include    "gps_uart.h"
 #include    "time_utils.h"
 
-my_time_t    gps_time;
-my_date_t    gps_date;
+my_time_t    gps_time = {.hours = 0, .minutes = 0, .seconds = 50};
+my_date_t    gps_date = {.year = 2000, .month = 1, .day = 1};
 my_time_t    gps_get_time() { return gps_time; }
 my_date_t    gps_get_date() { return gps_date; }
 
-gps_status_t gps_status = CONNECTING;
+// gps_status_t gps_status = CONNECTING;
+gps_status_t gps_status = GOT_DATETIME;         // FOR TEST
 gps_status_t gps_get_status() { return gps_status; }
 
 char         timestr[20];
