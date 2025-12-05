@@ -36,7 +36,12 @@ void init_gps_uart() {
 
     irq_set_exclusive_handler(GPS_UART_IRQ, gps_uart_rx_handler);
     irq_set_enabled(GPS_UART_IRQ, true);
-    irq_set_priority(GPS_UART_IRQ, GPS_UART_INT_PRI)
+    irq_set_priority(GPS_UART_IRQ, GPS_UART_INT_PRI);
+}
+
+// Disable gps once time is obtained
+void disable_gps_uart() {
+    irq_set_enabled(GPS_UART_IRQ, false);
 }
 
 // Read from GPS and pipe to terminal

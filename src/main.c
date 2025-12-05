@@ -3,21 +3,31 @@
 #include "pico/multicore.h"
 
 #include "const.h"
+
 #include "sd.h"
 #include "sd_sdcard.h"
 #include "sd_uart.h"
 #include "sd_audio.h"
+
+#include "time.h"
 #include "gps_uart.h"
 #include "gps_time.h"
+
 #include "ambience_control.h"
 
-// #define TEST_SD_CMD
+#include "tft_display.h"
+#include "tft_chardisp.h"
+
+#include "keypad.h"
+
+#define TEST_SD_CMD
 // #define TEST_SD_READ_RATE
 // #define TEST_SD_AUDIO_PLAYBACK
 // #define TEST_GPS_TIME
 // #define TEST_VOLUME_UPDATE
 
 void core_1_main() {
+    printf("\n[OK] Core 1: Main Set Up.");
     core1_loop:
         core1_maintain_audio_buff_routine();
     goto core1_loop;
@@ -26,19 +36,19 @@ void core_1_main() {
 int main() {
 
     // SETUP AND INTERRUPTS HERE
-    printf("\nInitializing...");
+    sleep_ms(10);
+    printf("\n\n\n\nBooting.");
 
     /////////////////
     // MULTICORE!  //
     /////////////////
     stdio_init_all(); // Enable multicore
     multicore_launch_core1(&core_1_main);
-    printf("\n[OK] Core 1 Main Launched");
+    printf("\n[OK] Core 1: Main Launched");
     
     /////////////////
     // SD CARD     //
     /////////////////
-    
     // Initialize the standard input/output library
     init_uart();
     init_uart_irq();
@@ -63,6 +73,17 @@ int main() {
 
     init_ambience_adc_and_dma();
     printf("\n[OK] Knob, LDR: ADC, DMA Started");
+
+    /////////////////
+    // KEYPAD      //
+    /////////////////
+    keypad_init_pins();
+    keypad_init_timer();
+    printf("\n[OK] Keypad: Pins, Timer started");
+
+    /////////////////
+    // DISPLAY     //
+    /////////////////
     
     #ifdef TEST_SD_CMD
         sd_command_shell(); // uncomment for debug
@@ -107,6 +128,8 @@ int main() {
             sleep_ms(200);
             printf("\nVolume | ADC: %4ld, Scalar: %.6f", get_volume_adc(), get_volume_scalar());
         #endif
+
+        alarm_fire_sequence();
 
     goto core0_loop;
     

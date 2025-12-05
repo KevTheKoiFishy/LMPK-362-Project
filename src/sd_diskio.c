@@ -248,7 +248,7 @@ DRESULT disk_read(
     if (disk_status(pdrv) == STA_NOINIT)
         return RES_NOTRDY;
     enable_sdcard();
-    for (int c = 0; c < count; c++)
+    for (uint c = 0; c < count; c++)
     {
         BYTE *p = &buffer[512 * c];
         value = sdcard_cmd(17, sector + c, 0x01);
@@ -288,7 +288,7 @@ DRESULT disk_write(
     if (disk_status(pdrv) == STA_NOINIT)
         return RES_NOTRDY;
     enable_sdcard();
-    for (int c = 0; c < count; c++)
+    for (uint c = 0; c < count; c++)
     {
         const BYTE *p = &buffer[512 * c];
         value = sdcard_cmd(24, sector + c, 0x01);

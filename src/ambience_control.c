@@ -152,14 +152,14 @@ static void init_ambience_dma() {
 // Initialize automatic conversions and volume_dial update.
 void init_ambience_adc_and_dma() {
     // Start dma BEFORE adc so it is ready for every ADC_DREQ
-    init_volume_dma();
-    init_volume_adc_freerun();
+    init_ambience_dma();
+    init_ambience_adc_freerun();
 }
 
 //// VOLUME MODULATION -- HELPERS ////
 
 // Clamp between [0, 1]
-static float clamp01(float x) {
+static float clamp_01(float x) {
     if (x < 0.0f)   return 0.0f;
     if (x > 1.0f)   return 1.0f;
     return x;
@@ -174,7 +174,7 @@ static float clamp_pct(float x) {
 
 // Alarm volume ramp-up fxn: Makes the ramp start gentle and increase faster near the end.
 static float volume_curve(float x) {
-    x = clamp01(x);
+    x = clamp_01(x);
     float k = VOLUME_RAMP_POW_CURVE_EXP;
     return powf(x, k);    // y = x^k
 }
@@ -193,7 +193,7 @@ void alarm_volume_ramp_blocking(float start_pct, float end_pct, uint16_t ramp_ms
     uint16_t steps = ramp_ms / step_ms;
     if (steps == 0) steps = 1;
 
-    printf("Starting alarm volume ramp: %.1f%% -> %.1f%% (%ld ms)\n", start_pct, end_pct, ramp_ms);
+    printf("Starting alarm volume ramp: %.1f%% -> %.1f%% (%d ms)\n", start_pct, end_pct, ramp_ms);
 
     for (uint16_t i = 0; i <= steps; i++) {
         float t = (float)i / (float)steps;   // 0 to 1
@@ -250,7 +250,7 @@ void configure_volume_ramp_int(float start_ratio, float end_ratio, uint16_t ramp
 void enable_volume_ramp_int() {
     // Set up initial trigger time
     VOL_RAMP_TIMER_HW -> alarm[VOL_RAMP_TIM_ALARM] = VOL_RAMP_TIMER_HW -> timerawl + volume_ramp_delT * 1000;
-    printf("Starting alarm volume ramp: %.1f%% -> %.1f%% by %ld ms\n", volume_ramp_a0*100.f, volume_ramp_af*100.f, volume_ramp_delT);
+    printf("Starting alarm volume ramp: %.1f%% -> %.1f%% by %d ms\n", volume_ramp_a0*100.f, volume_ramp_af*100.f, volume_ramp_delT);
 
     // Enable interrupt
     VOL_RAMP_TIMER_HW -> inte |= (1 << VOL_RAMP_TIM_ALARM);

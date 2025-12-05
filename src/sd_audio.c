@@ -21,8 +21,7 @@
 // INITIALIZE GLOBS  //
 
 // Audio File
-const        char * default_audio_path = DEFAULT_AUDIO_PATH;
-const        char * audio_path;
+const        char * audio_path      = DEFAULT_AUDIO_PATH;
              bool   audio_file_open = false;    // Is a file open?
               FIL   audio_file;                 // Pointer to file on drive. NOT the read/write pointer.
     file_header_t   file_header;                // Struct for file headers.      
@@ -82,6 +81,10 @@ uint16_t to_little_endian16(uint16_t x) {
 
 //   FILE ACCESS    //
 
+void              set_sd_audio_path(char * filename) {
+    audio_path = filename;
+}
+
 void              close_sd_audio_file() {
     // Close the currently open audio file, if any
     if (!audio_file_open) { return; }
@@ -107,17 +110,18 @@ audio_file_result open_sd_audio_file(const char* filename) {
     // Close any open audio files first
     close_sd_audio_file();
 
-    audio_path = filename;
+    // If empty, skip
+    if (filename[0] != 0) { audio_path = filename; }
 
     // Open the audio file on SD card for reading
     // Store in audio_file global variable
     FRESULT fr;
-    if ( (fr = f_open(&audio_file, filename, FA_READ)) ) {
+    if ( (fr = f_open(&audio_file, audio_path, FA_READ)) ) {
         print_error(fr, "\n  (ERROR) open_sd_audio_file");
         return ERR_ON_FILE_OPEN;
     }
 
-    printf("\n  (SUCCESS) open_sd_audio_file: Opened File `%s`\n", filename);
+    printf("\n  (SUCCESS) open_sd_audio_file: Opened File `%s`\n", audio_path);
 
     // Parse Headers
     audio_file_result wfr = wav_parse_headers();
@@ -622,4 +626,14 @@ void              stop_audio_playback() {
     pwm_set_irq_enabled(AUDIO_PWM_SLICE, false);
     audio_playing = false;
     audio_load_flag = false;
+}
+
+// TOGETHER //
+
+// Run after setting file path
+void              audio_play_sequence(char * filename) {
+    if (open_sd_audio_file(filename) != SUCCESS) { return; }
+    configure_audio_play();
+    init_audio_buffer();
+    start_audio_playback();
 }

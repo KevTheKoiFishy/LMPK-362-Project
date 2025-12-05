@@ -108,19 +108,19 @@ static const uint8_t *get_char(char c)
     }
 }
 
-static inline void tft_select()   
+static inline void tft_select()
 { 
     gpio_put(TFT_PIN_CS, 0); 
 }
-static inline void tft_deselect() 
+static inline void tft_deselect()
 { 
     gpio_put(TFT_PIN_CS, 1); 
 }
-static inline void tft_dc_command() 
+static inline void tft_dc_command()
 { 
     gpio_put(TFT_PIN_DC, 0); 
 }
-static inline void tft_dc_data()    
+static inline void tft_dc_data()
 { 
     gpio_put(TFT_PIN_DC, 1); 
 }
@@ -304,11 +304,11 @@ void fill_screen(uint16_t color)
 
 void fill_rect(int x, int y, int w, int h, uint16_t color)
 {
-    if (x < 0) { w += x; x = 0; }
-    if (y < 0) { h += y; y = 0; }
-    if (x + w > TFT_WIDTH)  w = TFT_WIDTH  - x;
-    if (y + h > TFT_HEIGHT) h = TFT_HEIGHT - y;
-    if (w <= 0 || h <= 0) return;
+    if (w <= 0 || h <= 0)   { return; }
+    if (x < 0)              { w += x; x = 0; }
+    if (y < 0)              { h += y; y = 0; }
+    if (x + w > TFT_WIDTH)  { w = TFT_WIDTH  - x;}
+    if (y + h > TFT_HEIGHT) { h = TFT_HEIGHT - y;}
 
     tft_set_addr_window(x, y, x + w - 1, y + h - 1);
 

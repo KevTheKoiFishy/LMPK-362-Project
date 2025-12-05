@@ -4,7 +4,7 @@
 #include "tft_chardisp.h"
 #include "tft_display.h"
 
-int main()
+int tft_main()
 {
     tft_init_pins();
 

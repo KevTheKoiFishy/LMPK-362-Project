@@ -266,7 +266,7 @@ void draw_bell(bool tilt)
     // Clear previous bell if needed
     clear_bell();
 
-    uint16_t color= TFT_YELLOW;
+    uint16_t color = TFT_YELLOW;
 
     int x_center = TFT_WIDTH / 2;
     int y_center = BELL_POS;

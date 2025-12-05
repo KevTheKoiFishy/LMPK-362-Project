@@ -370,10 +370,7 @@ void play_wav(int argc, char *argv[]) {
             return;
         }
         char * file_path = argv[2];
-        if (open_sd_audio_file(file_path) != SUCCESS) { return; }
-        configure_audio_play();
-        init_audio_buffer();
-        start_audio_playback();
+        audio_play_sequence(file_path);
     } else if (!strcmp(argv[1], "stop")){
         stop_audio_playback();
         close_sd_audio_file();
@@ -382,7 +379,6 @@ void play_wav(int argc, char *argv[]) {
         play_wav_print_man();
         return;
     }
-    
 }
 
 void rm(int argc, char *argv[])

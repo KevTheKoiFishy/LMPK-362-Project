@@ -1,31 +1,20 @@
-#include "pico/stdlib.h"
-#include <hardware/gpio.h>
 #include <stdio.h>
-#include "keypad_queue.h"
+#include <hardware/gpio.h>
+
+#include "pico/stdlib.h"
+
 #include "const.h"
+#include "keypad.h"
+#include "keypad_queue.h"
 
 // Global column variable
-int col = -1;
+int keypad_col_driven = -1;
 
 // Global key state
-static bool state[16] = {}; // Are keys pressed/released
+static bool keypad_state[16] = {}; // Are keys pressed/released
 
 // Keymap for the keypad
 const char keymap[17] = "DCBA#9630852*741";
-
-// Defined here to avoid circular dependency issues with autotest
-// You can see the struct definition in queue.h
-
-// KeyEvents kev = { 
-//     .head = 0, 
-//     .tail = 0 
-// };
-
-void keypad_drive_column();
-void keypad_isr();
-
-/********************************************************* */
-// Implement the functions below.
 
 void keypad_init_pins() {
     sio_hw -> gpio_oe_set = KEYPAD_COLMASK;
@@ -58,25 +47,25 @@ void keypad_init_timer() {
     timer0_hw -> inte |= TIMER_INTE_ALARM_0_BITS;
     irq_set_exclusive_handler(TIMER0_IRQ_0, keypad_drive_column);
     irq_set_enabled(TIMER0_IRQ_0, true);
-    timer0_hw -> alarm[0] = timer0_hw -> timerawl + (int)1e6;
+    timer0_hw -> alarm[KEYPAD_COLSCAN_ALARM] = timer0_hw -> timerawl + (int)1e6;
 
     timer0_hw -> inte |= TIMER_INTE_ALARM_1_BITS;
     irq_set_exclusive_handler(TIMER0_IRQ_1, keypad_isr);
     irq_set_enabled(TIMER0_IRQ_1, true);
-    timer0_hw -> alarm[1] = timer0_hw -> timerawl + (int)1.1e6;
+    timer0_hw -> alarm[KEYPAD_ROWSCAN_ALARM] = timer0_hw -> timerawl + (int)1.1e6;
 }
 
 void keypad_drive_column() {
     timer0_hw -> intr |= TIMER_INTR_ALARM_0_BITS;
 
-    if (col >= 3) { col = -1; }
+    if (keypad_col_driven >= 3) { keypad_col_driven = -1; }
     sio_hw -> gpio_clr = KEYPAD_COLMASK;
-    sio_hw -> gpio_set = 0b1000000u << (++col);
+    sio_hw -> gpio_set = 0b1000000u << (++keypad_col_driven);
 
-    timer0_hw -> alarm[0] = timer0_hw -> timerawl + 2500;
+    timer0_hw -> alarm[KEYPAD_COLSCAN_ALARM] = timer0_hw -> timerawl + 2500;
 }
 
-uint8_t keypad_read_rows() {
+static inline uint8_t keypad_read_rows() {
     return ((sio_hw -> gpio_in) >> 2) & 0xF;
 }
 
@@ -84,18 +73,18 @@ void keypad_isr() {
     timer0_hw -> intr |= TIMER_INTR_ALARM_1_BITS;
     
     uint8_t row_read = keypad_read_rows();
-    uint8_t li = (col << 2);
+    uint8_t li = (keypad_col_driven << 2);
 
     for (uint8_t row = 0; row < 4; ++row) {
-        uint8_t state_now = (row_read & 1);
-        if (state[li] != state_now) {
-            key_push((state_now ? 0x100 : 0x0) | keymap[li]);
-            state[li] = state_now;
+        uint8_t keypad_state_now = (row_read & 1);
+        if (keypad_state[li] != keypad_state_now) {
+            key_push((keypad_state_now ? 0x100 : 0x0) | keymap[li]);
+            keypad_state[li] = keypad_state_now;
         }
 
         ++li;
         row_read >>= 1;
     }
 
-    timer0_hw -> alarm[1] = timer0_hw -> timerawl + 2500;
+    timer0_hw -> alarm[KEYPAD_ROWSCAN_ALARM] = timer0_hw -> timerawl + 2500;
 }

@@ -9,6 +9,7 @@
 
 #include <hardware/spi.h>
 #include <hardware/timer.h>
+#include <hardware/uart.h>
 
 // MACROS
 #define GET_CORE_NUM()      *(uint32_t *) (SIO_BASE + SIO_CPUID_OFFSET)
@@ -18,10 +19,6 @@
 
 /*** FORMAT                         ***/
 /*** FUNCTIONALITY - resources used ***/
-
-// TIME
-#define TIME_ZONE_OFFSET    -4
-#define DAYLIGHT_SAVINGS_EN false
 
 // ONBOARD - sio
 #define ONBOARD_LEDS        {22, 23, 24, 25}
@@ -35,6 +32,10 @@
 #define KEYPAD_ROWMASK      (0b00001111u << 2u)
 #define KEYPAD_COLMASK      (0b11110000u << 2u)
 
+#define KEYPAD_TIMER_HW     timer0_hw
+#define KEYPAD_COLSCAN_ALARM 0
+#define KEYPAD_ROWSCAN_ALARM 1
+
 // 7-SEG DISPLAY - unused
 #define DISP_7SEG_MASK      (0x7FF << 10u)
 
@@ -47,8 +48,8 @@
 
 // VOLUME CONTROL - adc4
 #define VOL_RAMP_TIMER_HW   timer0_hw
-#define VOL_RAMP_INT_NUM    TIMER0_IRQ_1
-#define VOL_RAMP_TIM_ALARM  1
+#define VOL_RAMP_INT_NUM    TIMER0_IRQ_2
+#define VOL_RAMP_TIM_ALARM  2
 #define VOL_RAMP_INT_PRI    2
 #define KNOB_ADC_PIN        45
 #define AMB_DMA_CH          0

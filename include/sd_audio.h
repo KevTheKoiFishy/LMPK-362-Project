@@ -13,7 +13,7 @@
 #include "sd_diskio.h"
 
 // Audio File Helpers
-typedef enum uint8_t {
+typedef enum {
     SUCCESS              = 00,
     ERR_ON_FILE_OPEN     = 01,
     ERR_BAD_FILE_HEADER  = 02,
@@ -71,6 +71,7 @@ typedef struct {
 uint32_t            to_little_endian(uint32_t x);
 uint16_t            to_little_endian16(uint16_t x);
 
+void                set_sd_audio_path(char * filename);
 void                close_sd_audio_file();
 audio_file_result   reopen_sd_audio_file();
 audio_file_result   reopen_sd_audio_file();
@@ -90,5 +91,7 @@ void                step_audio_isr();
 void                configure_audio_play();
 void                start_audio_playback();
 void                stop_audio_playback();
+
+void                audio_play_sequence(char * filename);
 
 #endif
