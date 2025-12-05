@@ -292,8 +292,8 @@ void disable_volume_ramp_int() {
 //// DISPLAY SET BRIGHTNESS ////
 
 static float adaptive_brightness_activation(float x) {
-    x = (x - 2048.f) * .0025f;          // Normalize Brightness
-    return 4000.f / (1.0f + expf(x));   // Min Brightness is 95/4095
+    x = (x - 2048.f) * .0025f;                  // Normalize Brightness
+    return 4000.f / (1.0f + expf(-x)) + 95.0f;  // Min Brightness is 95/4095
 }
 
 void display_brightness_isr() {

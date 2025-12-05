@@ -26,7 +26,7 @@
 // #define TEST_SD_READ_RATE
 // #define TEST_SD_AUDIO_PLAYBACK
 // #define TEST_GPS_TIME
-// #define TEST_AMB_UPDATE
+#define TEST_AMB_UPDATE
 #define TEST_LOCAL_TIME
 // #define TEST_KEYPAD
 // #define TEST_TFT_MAIN
@@ -42,7 +42,6 @@ int main() {
     #ifdef TEST_TFT_MAIN
         return tft_main();
     #endif
-
 
     // SETUP AND INTERRUPTS HERE
     init_uart();
@@ -169,7 +168,7 @@ int main() {
             local_time.hours,
             local_time.minutes,
             local_time.seconds,
-            gps_status == GOT_DATETIME,
+            gps_status != CONNECTING,
             alarm_cfg.hours,
             alarm_cfg.minutes,
             alarm_cfg.enabled,
@@ -178,7 +177,6 @@ int main() {
         sleep_ms(1000);
 
         #ifdef TEST_AMB_UPDATE
-            sleep_ms(200);
             printf("\n");
             printf("\nKnob Mode  | %s", get_knob_mode() == BRIGHTNESS_MODE ? "BRIGHTNESS" : "VOLUME");
             printf("\nVolume     | Ramp:  %s, Setting: %4d, Scalar: %6.3f",       get_volume_ramp_en()      ? "T" : "F", get_volume_setting(), get_volume_scalar());
